@@ -1,0 +1,864 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+    SRES - Student Relationship Engagement System
+{% endblock %}
+
+{% block head_css2 %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dataTables.bootstrap4.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sres.index-staff.css') }}">
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ajaxq.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jquery.dataTables.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dataTables.bootstrap4.min.js') }}"></script>
+    {% raw %}
+        <script id="dashboard_recent_asset_card_template" type="text/x-handlebars-template">
+            <div class="col-sm-12">
+                <div class="border-top py-3">
+                    <span class="font-weight-normal">
+                        {{#ifEquals assetType 'table'}}
+                            <span class="fa fa-table"></span> List:
+                        {{/ifEquals}}
+                        {{#ifEquals assetType 'column'}}
+                            <span class="fa fa-columns"></span> Column:
+                        {{/ifEquals}}
+                        {{#ifEquals assetType 'filter'}}
+                            <span class="fa fa-filter"></span> Filter:
+                        {{/ifEquals}}
+                        {{#ifEquals assetType 'portal'}}
+                            <span class="fa fa-window-maximize"></span> Portal:
+                        {{/ifEquals}}
+                        {{#ifEquals assetType 'insight'}}
+                            <span class="fa fa-bell"></span> Insight:
+                        {{/ifEquals}}
+                        {{title}}
+                        {{#if assetIsFilterSent}}<span class="badge badge-success" data-tippy-content="Filter has been sent">Sent</span>{{/if}}
+                        {{#ifEquals assetWorkflowState 'archived'}}<span class="badge badge-secondary">Archived</span>{{/ifEquals}}
+                        {{#if assetIsPortal}}
+                            {{#if available}}
+                                <span class="badge badge-success">Available</span>
+                            {{else}}
+                                <span class="badge badge-secondary" data-tippy-content="{{availabilityComments}}">Not available</span>
+                            {{/if}}
+                        {{/if}}
+                    </span>
+                    <span class="font-weight-light">{{subtitle}}</span>
+                    {{#each buttons}}
+                        <a class="ml-1 mr-1" href="{{this.url}}" data-tippy-content="{{this.linkText}}" aria-label="{{this.linkText}}"><span class="fa fa-{{this.icon}}"></span></a>
+                    {{/each}}
+                    {{#if lastAccessed}}
+                        <span class="text-muted">{{lastAccessed}}</span>
+                    {{/if}}
+                    {{#if canBeUnpinned}}
+                        <span class="float-right">
+                            <a class="sres-dashboard-unpin-asset sres-clickable text-dark" 
+                                    aria-label="Unpin from dashboard{{#ifEquals assetType 'table'}} and stop watching{{/ifEquals}}" 
+                                    data-tippy-content="Unpin from dashboard{{#ifEquals assetType 'table'}} and stop watching{{/ifEquals}}" 
+                                    data-sres-asset-type="{{assetType}}" data-sres-asset-uuid="{{assetUuid}}">
+                                <span class="fa fa-thumbtack"></span>
+                            </a>
+                        </span>
+                    {{/if}}
+                    {{#if canBePinned}}
+                        <span class="float-right">
+                            <a class="sres-dashboard-pin-asset sres-clickable text-primary" 
+                                    aria-label="Pin to dashboard{{#ifEquals assetType 'table'}} and watch{{/ifEquals}}" 
+                                    data-tippy-content="Pin to dashboard{{#ifEquals assetType 'table'}} and watch{{/ifEquals}}" 
+                                    data-sres-asset-type="{{assetType}}" data-sres-asset-uuid="{{assetUuid}}">
+                                <span class="fa fa-thumbtack"></span>
+                            </a>
+                        </span>
+                    {{/if}}
+                </div>
+            </div>
+        </script>
+        
+        <script id="dashboard_intelligence_card_template" type="text/x-handlebars-template">
+            <div class="carousel-item {{#if firstOne}}active{{/if}}">
+                <div class="card h-100">
+                    <div class="card-body h-100">
+                        <p class="card-text sres-text-truncate">
+                            <span class="font-weight-bold">
+                                {{#if titleIcon}}<span class="fa fa-{{titleIcon}}"></span>{{/if}}
+                                {{title}}
+                            </span>
+                            {{#if subtitle}}
+                                <span class="font-weight-normal" data-tippy-content="{{subtitle}}">{{subtitle}}</span>
+                            {{/if}}
+                        </p>
+                        <div class="sres-intelligence-card-message-container">
+                            {{#if message}}
+                                <p class="card-text font-weight-normal">{{message}}</p>
+                            {{/if}}
+                            {{#ifEquals recordType 'positive_comments'}}
+                                <ul>
+                                    {{#each positiveComments}}
+                                        <li><span data-tippy-content="{{this.commentFull}}">{{this.commentShort}}</span></li>
+                                    {{/each}}
+                                </ul>
+                            {{/ifEquals}}
+                        </div>
+                        {{#if buttons}}
+                            <div class="mt-2">
+                                {{#each buttons}}
+                                    <a href="{{this.url}}" class="mr-2"><span class="fa fa-{{this.icon}}"></span> {{this.linkText}}</a>
+                                {{/each}}
+                            </div>
+                        {{/if}}
+                    </div>
+                </div>
+            </div>
+        </script>
+        
+        <script id="recent_asset_card_template" type="text/x-handlebars-template">
+            <div class="col-lg-3 col-md-6 col-sm-12 py-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <p class="card-text">
+                            <span class="font-weight-bold">
+                                {{#ifEquals assetType 'table'}}
+                                    <span class="fa fa-table"></span> List:
+                                {{/ifEquals}}
+                                {{#ifEquals assetType 'column'}}
+                                    <span class="fa fa-columns"></span> Column:
+                                {{/ifEquals}}
+                                {{#ifEquals assetType 'filter'}}
+                                    <span class="fa fa-filter"></span> Filter:
+                                {{/ifEquals}}
+                                {{#ifEquals assetType 'portal'}}
+                                    <span class="fa fa-window-maximize"></span> Portal:
+                                {{/ifEquals}}
+                                {{title}}
+                                {{#if assetIsFilterSent}}<span class="badge badge-success" data-tippy-content="Filter has been sent">Sent</span>{{/if}}
+                                {{#ifEquals assetWorkflowState 'archived'}}<span class="badge badge-secondary">Archived</span>{{/ifEquals}}
+                                {{#if assetIsPortal}}
+                                    {{#if available}}
+                                        <span class="badge badge-success">Available</span>
+                                    {{else}}
+                                        <span class="badge badge-secondary" data-tippy-content="{{availabilityComments}}">Not available</span>
+                                    {{/if}}
+                                {{/if}}
+                            </span>
+                            <span class="font-weight-light">{{subtitle}}</span>
+                        </p>
+                        {{#if onlyShowTitle}}
+                        {{else}}
+                            {{#if assetIsTable}}
+                                {{#if activeStudentsCount}}
+                                    <p class="small">Data recently updated for {{activeStudentsCount}} students across {{activeColumnsCount}} columns</p>
+                                {{/if}}
+                            {{/if}}
+                            {{#if assetIsFilterSent}}
+                                <p class="small">{{percentOpens}}% of {{countRecipients}} recipients have opened</p>
+                                <p class="small">{{feedbackSummary}}</p>
+                                {{#if filterRecentComments}}
+                                    <ul class="small">
+                                        {{#each filterRecentComments}}
+                                            <li><span data-tippy-content="{{this.commentFull}}">{{this.commentShort}}</span></li>
+                                        {{/each}}
+                                    </ul>
+                                {{/if}}
+                            {{/if}}
+                            {{#if assetIsPortal}}
+                                {{#if timesOpened}}
+                                    <p class="small">{{studentsOpened}} students have opened {{timesOpened}} times</p>
+                                {{/if}}
+                                <p class="small">{{feedbackSummary}}</p>
+                                {{#if filterRecentComments}}
+                                    <ul class="small">
+                                        {{#each filterRecentComments}}
+                                            <li><span data-tippy-content="{{this.commentFull}}">{{this.commentShort}}</span></li>
+                                        {{/each}}
+                                    </ul>
+                                {{/if}}
+                            {{/if}}
+                        {{/if}}
+                        {{#if onlyShowTitle}}
+                            {{#each buttons}}
+                                <a class="mr-1 mb-1" href="{{this.url}}" data-tippy-content="{{this.linkText}}" aria-label="{{this.linkText}}">
+                                    <span class="fa fa-{{this.icon}}"></span>
+                                </a>
+                            {{/each}}
+                        {{else}}
+                            {{#each buttons}}
+                                <a class="btn btn-outline-primary mr-1 mb-1" href="{{this.url}}">{{this.linkText}}</a>
+                            {{/each}}
+                        {{/if}}
+                    </div>
+                    <div class="card-footer">
+                        <small class="text-muted">{{lastAccessed}}</small>
+                        {{#if canBePinned}}
+                            <small class="float-right">
+                                <a class="sres-dashboard-pin-asset sres-clickable text-primary" aria-label="Pin to dashboard{{#ifEquals assetType 'table'}} and watch{{/ifEquals}}" data-tippy-content="Pin to dashboard{{#ifEquals assetType 'table'}} and watch{{/ifEquals}}" data-sres-asset-type="{{assetType}}" data-sres-asset-uuid="{{assetUuid}}">
+                                    <span class="fa fa-thumbtack"></span>
+                                </a>
+                            </small>
+                        {{/if}}
+                    </div>
+                </div>
+            </div>
+        </script>
+        
+        <script id="collective_asset_line_template" type="text/x-handlebars-template">
+            <div class="col-lg-3 col-md-6 col-sm-12 py-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <span class="fa fa-{{asset_icon}}"></span>
+                        <span class="font-weight-bold">
+                            <a href="{{url}}">{{name}}</a>
+                        </span>
+                        {{#if description}}
+                            <p class="card-text"><span class="sres-collective-asset-description"> {{description}}</span></p>
+                        {{/if}}
+                    </div>
+                    <div class="card-footer">
+                        <small class="text-muted"><span class="fa fa-heart"></span> {{count_likes}}</small>
+                    </div>
+                </div>
+            </div>
+        </script>
+        
+        <script id="data_entry_table_template" type="text/x-handlebars-template">
+            <div class="card bg-light mb-2">
+                <div class="card-header sres-data-entry-container-header" data-toggle="collapse" data-target="#data_entry_links_{{table_uuid}}_container">
+                    {{table_display_name}}
+                </div>
+                <div class="card-body collapse" id="data_entry_links_{{table_uuid}}_container">
+                    {{#each columns}}
+                        {{#if standard_entry_column}}
+                            <div class="mb-1">
+                                <label>
+                                    {{display_name}}
+                                    <span class="text-muted">{{description}}</span>
+                                </label>
+                                {{#if is_list_admin}}
+                                    {{#if is_active}}
+                                        <span class="badge badge-success">Active</span>
+                                    {{else}}
+                                        <span class="badge badge-warning">Inactive</span>
+                                    {{/if}}
+                                    {{#if is_student_editable}}
+                                        <span class="badge badge-info">Student-editable</span>
+                                    {{/if}}
+                                {{/if}}
+                                <a class="btn btn-outline-primary" href="{{add_value_link}}" role="button">
+                                    <span class="fa fa-angle-right" aria-hidden="true"></span>
+                                    <span class="d-md-none">&nbsp;S</span>
+                                    <span class="d-none d-md-inline">&nbsp;Single entry mode</span>
+                                </a>
+                                <a class="btn btn-outline-primary" href="{{add_value_bulk_link}}" role="button">
+                                    <span class="fa fa-angle-double-right" aria-hidden="true"></span>
+                                    <span class="d-md-none">&nbsp;B</span>
+                                    <span class="d-none d-md-inline">&nbsp;Bulk entry mode</span>
+                                </a>
+                                <a class="btn btn-outline-primary" href="{{add_value_roll_link}}" role="button">
+                                    <span class="fa fa-th-list" aria-hidden="true"></span>
+                                    <span class="d-md-none">&nbsp;R</span>
+                                    <span class="d-none d-md-inline">&nbsp;Roll view mode</span>
+                                </a>
+                            </div>
+                        {{/if}}
+                    {{/each}}
+                </div>
+            </div>
+        </script>
+        
+        <script id="search_sres_result_card_template" type="text/x-handlebars-template">
+            <div class="col-lg-3 col-md-6 col-sm-12 py-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <p class="card-text">
+                            {{#ifEquals haystackType 'tables'}}
+                                <span class="fa fa-table"></span>
+                            {{/ifEquals}}
+                            {{#ifEquals haystackType 'columns'}}
+                                <span class="fa fa-columns"></span>
+                            {{/ifEquals}}
+                            {{#ifEquals haystackType 'filters'}}
+                                <span class="fa fa-filter"></span>
+                            {{/ifEquals}}
+                            {{#ifEquals haystackType 'portals'}}
+                                <span class="fa fa-window-maximize"></span>
+                            {{/ifEquals}}
+                            {{#ifEquals haystackType 'identifiers'}}
+                                <span class="fa fa-user"></span>
+                            {{/ifEquals}}
+                            {{#ifEquals haystackType 'student_data'}}
+                                <span class="fa fa-file-alt"></span>
+                            {{/ifEquals}}
+                            <span class="font-weight-bold">{{haystackTypeDisplay}}</span>:
+                            <span class="font-weight-bold">{{display}}</span>
+                            {{#if workflowState}}
+                                <span class="badge badge-warning">{{workflowState}}</span>
+                            {{/if}}
+                        </p>
+                        {{#each displaySubs}}
+                            <p class="card-text small">{{this}}</p>
+                        {{/each}}
+                        {{#if searchResultPreview}}
+                            <p class="card-text font-weight-light small">{{searchResultPreview}}</p>
+                        {{/if}}
+                        {{#each links}}
+                            <a href="{{this.url}}" class="btn btn-outline-primary mb-1 mr-1">{{this.display}}</a>
+                        {{/each}}
+                    </div>
+                </div>
+            </div>
+        </script>
+        
+    {% endraw %}
+    <script src="{{ url_for('static', filename='js/sres.index-staff.js', rand=range(1000,9999)|random|string) }}"></script>
+    <script>
+        ENV['SRES_USER'] = {{ get_sres_user_details()|tojson }};
+        ENV['IS_USER_ADMIN_SOMEWHERE'] = {{ vars.is_user_admin_somewhere|tojson }};
+        ENV['GET_RECENT_ACCESSES_ENDPOINT'] = "{{ url_for('index.get_recent_accesses', asset_type='__asset_type__') }}";
+        ENV['GET_RECENT_FEEDBACK_ENDPOINT'] = "{{ url_for('index.get_recent_feedback') }}";
+        ENV['TABLE_VIEW_ENDPOINT'] = "{{ url_for('table.view_table', table_uuid='__table_uuid__') }}";
+        ENV['TABLE_VIEW_VIEW_ENDPOINT'] = "{{ url_for('table.view_table', table_uuid='__table_uuid__', view='__view_uuid__') }}";
+        ENV['TABLE_VIEW_RELATED_ASSETS_ENDPOINT'] = "{{ url_for('table.view_related_assets', table_uuid='__table_uuid__') }}";
+        ENV['TABLE_EDIT_ENDPOINT'] = "{{ url_for('table.edit_table', table_uuid='__table_uuid__') }}";
+        ENV['TABLE_CLONE_ENDPOINT'] = "{{ url_for('table.clone_table', table_uuid='__table_uuid__') }}";
+        ENV['TABLE_VIEWS_ENUMERATE_ENDPOINT'] = "{{ url_for('table.enumerate_views', table_uuid='__table_uuid__') }}";
+        ENV['TABLE_DELETE_ENDPOINT'] = "{{ url_for('table.delete_table', table_uuid='__table_uuid__') }}";
+        ENV['TABLE_ARCHIVE_ENDPOINT'] = "{{ url_for('table.archive_table', table_uuid='__table_uuid__') }}";
+        ENV['TABLE_UNARCHIVE_ENDPOINT'] = "{{ url_for('table.unarchive_table', table_uuid='__table_uuid__') }}";
+        ENV['TABLE_FIND_ENDPOINT'] = "{{ url_for('table.find_tables', requestor=request.endpoint) }}";
+        ENV['VIEW_SUMMARIES_ENDPOINT'] = "{{ url_for('summary.view_summaries', table_uuid='__table_uuid__') }}";
+        ENV['VIEW_SINGLE_STUDENT_ENDPOINT'] = "{{ url_for('entry.view_single_student', table_uuid='__table_uuid__', mode='identify')|safe }}";
+        ENV['TABLE_IMPORT_DATA_ENDPOINT'] = "{{ url_for('table.import_data', table_uuid='__table_uuid__') }}";
+        ENV['COLUMN_EDIT_ENDPOINT'] = "{{ url_for('table.edit_column', table_uuid='__table_uuid__', column_uuid='__column_uuid__') }}";
+        ENV['COLUMN_SHOW_QUICK_ACCESS_ENDPOINT'] = "{{ url_for('table.show_quick_access_links', table_uuid='__table_uuid__', column_uuid='__column_uuid__') }}";
+        ENV['FILTER_EDIT_ENDPOINT'] = "{{ url_for('filter.edit_filter', filter_uuid='__filter_uuid__') }}";
+        ENV['FILTER_DELETE_ENDPOINT'] = "{{ url_for('filter.delete_filter', filter_uuid='__filter_uuid__') }}";
+        ENV['FILTER_PREVIEW_ENDPOINT'] = "{{ url_for('filter.preview_filter', filter_uuid='__filter_uuid__') }}";
+        ENV['FILTER_CLONE_ENDPOINT'] = "{{ url_for('filter.clone_filter', filter_uuid='__filter_uuid__') }}";
+        ENV['FILTER_VIEW_LOGS_ENDPOINT'] = "{{ url_for('filter.view_logs', filter_uuid='__filter_uuid__') }}";
+        ENV['FILTER_LIST_ENDPOINT'] = "{{ url_for('filter.list_filters') }}";
+        ENV['PORTAL_EDIT_ENDPOINT'] = "{{ url_for('portal.edit_portal', portal_uuid='__portal_uuid__') }}";
+        ENV['PORTAL_PREVIEW_ENDPOINT'] = "{{ url_for('portal.view_portal', portal_uuid='__portal_uuid__', preview=1)|safe }}";
+        ENV['PORTAL_CLONE_ENDPOINT'] = "{{ url_for('portal.clone_portal', portal_uuid='__portal_uuid__') }}";
+        ENV['PORTAL_VIEW_LOG_ENDPOINT'] = "{{ url_for('portal.view_logs', portal_uuid='__portal_uuid__') }}";
+        ENV['PORTAL_DELETE_ENDPOINT'] = "{{ url_for('portal.delete_portal', portal_uuid='__portal_uuid__') }}";
+        ENV['PORTAL_LIST_ENDPOINT'] = "{{ url_for('portal.list_portals') }}";
+        ENV['INSIGHT_EDIT_ENDPOINT'] = "{{ url_for('insight.edit_insight', insight_uuid='__insight_uuid__') }}";
+        ENV['INSIGHT_PREVIEW_ENDPOINT'] = "{{ url_for('insight.preview_insight', insight_uuid='__insight_uuid__') }}";
+        ENV['INSIGHT_RUN_ENDPOINT'] = "{{ url_for('insight.preview_insight', insight_uuid='__insight_uuid__', run=1)|safe }}";
+        ENV['INSIGHT_CLONE_ENDPOINT'] = "{{ url_for('insight.clone_insight', insight_uuid='__insight_uuid__') }}";
+        ENV['INSIGHT_DELETE_ENDPOINT'] = "{{ url_for('insight.delete_insight', insight_uuid='__insight_uuid__') }}";
+        ENV['INSIGHT_LIST_ENDPOINT'] = "{{ url_for('insight.list_insights') }}";
+        ENV['DATA_ENTRY_LIST_ENDPOINT'] = "{{ url_for('table.get_available_data_entry') }}";
+        ENV['COLLECTIVE_LIST_ASSETS'] = "{{ url_for('collective.search_collective') }}";
+        ENV['COLLECTIVE_SHOW_ASSET_ENDPOINT'] = "{{ url_for('collective.show_asset', asset_uuid='__asset_uuid__', _external=True)|safe }}";
+        ENV['SEARCH_SRES_ENDPOINT'] = "{{ url_for('index.search_sres') }}";
+        ENV['PIN_TO_DASHBOARD_ENDPOINT'] = "{{ url_for('index.pin_asset', asset_type='__asset_type__', asset_uuid='__asset_uuid__') }}";
+        ENV['GET_PINNED_ASSETS_ENDPOINT'] = "{{ url_for('index.get_pinned_assets', asset_type='__asset_type__') }}";
+        ENV['GET_DASHBOARD_NOTABLES_ENDPOINT'] = "{{ url_for('index.get_recent_notables') }}";
+    </script>
+    {% if not vars.is_user_admin_somewhere %}
+        <script>
+            $(document).ready(function(){
+                // automatically jump to data entry
+                indexShowTab('#data_entry');
+            });
+        </script>
+    {% endif %}
+{% endblock %}
+
+{% block body %}
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <script>
+                    $(document).ready(function(){
+                        $.notify({ message: {{ message|tojson }} }, { type: {{ category|tojson }} });
+                    });
+                </script>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div id="explorer_warning" class="alert alert-warning d-none">
+        <h4>Browser deprecation warning</h4>
+        <p>You are using a older version of Internet Explorer. If some SRES features do not function correctly, please consider upgrading to Chrome, Firefox or Edge.</p>
+    </div>
+
+    <div class="row">
+        
+        <nav id="sidebar_menu" class="col-md-2 col-sm-2 d-md-block bg-light sidebar">
+            <div class="">
+                <ul class="nav flex-column nav-pills" role="tablist" aria-orientation="vertical">
+                    <li class="nav-item">
+                        <a class="nav-link active" id="dashboard-tab" data-toggle="pill" href="#dashboard" role="tab" aria-controls="dashboard" aria-selected="true" data-tippy-content="{{ vars.tabs_meta.dashboard.hint }}" data-tippy-placement="right" data-tippy-arrow="true">
+                            <span class="fa fa-home sres-icon"></span>
+                            {{ vars.tabs_meta.dashboard.menu_item }}
+                        </a>
+                    </li>
+                    {% if '_list' in vars.admin_levels or vars.is_list_admin_somewhere or vars.is_list_auditor_somewhere %}
+                        <li class="nav-item">
+                            <a class="nav-link" id="lists-tab" data-toggle="pill" href="#lists" role="tab" aria-controls="lists" aria-selected="false" data-tippy-content="{{ vars.tabs_meta.lists.hint }}" data-tippy-placement="right" data-tippy-arrow="true">
+                                <span class="fa fa-table sres-icon"></span>
+                                {{ vars.tabs_meta.lists.menu_item }}
+                            </a>
+                        </li>
+                    {% endif %}
+                    {% if '_filter' in vars.admin_levels %}
+                        <li class="nav-item">
+                            <a class="nav-link" id="filters-tab" data-toggle="pill" href="#filters" role="tab" aria-controls="filters" aria-selected="false" data-tippy-content="{{ vars.tabs_meta.filters.hint }}" data-tippy-placement="right" data-tippy-arrow="true">
+                                <span class="fa fa-filter sres-icon"></span>
+                                {{ vars.tabs_meta.filters.menu_item }}
+                            </a>
+                        </li>
+                    {% endif %}
+                    {% if '_list' in vars.admin_levels or '_super' in vars.admin_levels %}
+                        <li class="nav-item">
+                            <a class="nav-link" id="portals-tab" data-toggle="pill" href="#portals" role="tab" aria-controls="portals" aria-selected="false" data-tippy-content="{{ vars.tabs_meta.portals.hint }}" data-tippy-placement="right" data-tippy-arrow="true">
+                                <span class="fa fa-window-maximize sres-icon"></span>
+                                {{ vars.tabs_meta.portals.menu_item }}
+                            </a>
+                        </li>
+                    {% endif %}
+                    {% if '_list' in vars.admin_levels or vars.is_list_admin_somewhere %}
+                        <li class="nav-item">
+                            <a class="nav-link" id="insights-tab" data-toggle="pill" href="#insights" role="tab" aria-controls="insights" aria-selected="false" data-tippy-content="{{ vars.tabs_meta.insights.hint }}" data-tippy-placement="right" data-tippy-arrow="true">
+                                <span class="fa fa-bell sres-icon"></span>
+                                {{ vars.tabs_meta.insights.menu_item }}
+                            </a>
+                        </li>
+                    {% endif %}
+                    {% if '_list' in vars.admin_levels or '_super' in vars.admin_levels %}
+                        <li class="nav-item">
+                            <a class="nav-link" id="collective-tab" data-toggle="pill" href="#collective" role="tab" aria-controls="collective" aria-selected="false" data-tippy-content="{{ vars.tabs_meta.collective.hint }}" data-tippy-placement="right" data-tippy-arrow="true">
+                                <span class="fa fa-share-alt sres-icon"></span>
+                                {{ vars.tabs_meta.collective.menu_item }}
+                            </a>
+                        </li>
+                    {% endif %}
+                    {% if '_list' in vars.admin_levels or '_super' in vars.admin_levels %}
+                        <li class="nav-item">
+                            <a class="nav-link" id="tags-tab" href="{{ url_for('tags.tags') }}" role="tab" aria-controls="tags" aria-selected="false" data-tippy-content="{{ vars.tabs_meta.tags.hint }}" data-tippy-placement="right" data-tippy-arrow="true">
+                                <span class="fa fa-tags sres-icon"></span>
+                                {{ vars.tabs_meta.tags.menu_item }}
+                            </a>
+                        </li>
+                    {% endif %}
+                    <li class="nav-item">
+                        <a class="nav-link" id="data_entry-tab" data-toggle="pill" href="#data_entry" role="tab" aria-controls="data_entry" aria-selected="false" data-tippy-content="{{ vars.tabs_meta.data_entry.hint }}" data-tippy-placement="right" data-tippy-arrow="true">
+                            <span class="fa fa-pen sres-icon"></span>
+                            {{ vars.tabs_meta.data_entry.menu_item }}
+                        </a>
+                    </li>
+                    {% if '_list' in vars.admin_levels or '_super' in vars.admin_levels %}
+                        <li class="nav-item">
+                            <a class="nav-link" id="search-tab" data-toggle="pill" href="#search" role="tab" aria-controls="search" aria-selected="false" data-tippy-content="{{ vars.tabs_meta.search.hint }}" data-tippy-placement="right" data-tippy-arrow="true">
+                                <span class="fa fa-search sres-icon"></span>
+                                {{ vars.tabs_meta.search.menu_item }}
+                            </a>
+                        </li>
+                    {% endif %}
+                    {% if "_super" in vars.admin_levels %}
+                        <li class="nav-item">
+                            <a class="nav-link" id="superadmin-tab" data-toggle="pill" href="#superadmin" role="tab" aria-controls="superadmin" aria-selected="false" data-tippy-content="{{ vars.tabs_meta.superadmin.hint }}" data-tippy-placement="right" data-tippy-arrow="true">
+                                <span class="fa fa-shield-alt sres-icon"></span>
+                                {{ vars.tabs_meta.superadmin.menu_item }}
+                            </a>
+                        </li>
+                    {% endif %}
+                    {% if vars.is_user_admin_somewhere %}
+                        <li class="nav-item">
+                            <a class="nav-link" id="search-tab" data-toggle="pill" href="#help" role="tab" aria-controls="help" aria-selected="false" data-tippy-content="{{ vars.tabs_meta.help.hint }}" data-tippy-placement="right" data-tippy-arrow="true">
+                                <span class="fa fa-question-circle sres-icon"></span>
+                                {{ vars.tabs_meta.help.menu_item }}
+                            </a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </nav>
+        
+        <div class="col-sm-10 tab-content">
+            
+            <div class="tab-pane pt-2 fade show active" id="dashboard" role="tabpanel" aria-labelledby="dashboard-tab">
+                <div class="row">
+                    <div class="col-sm-12">
+                        <h1>{{ vars.tabs_meta.dashboard.display }}</h1>
+                    </div>
+                </div>
+                {% if vars.is_user_admin_somewhere %}
+                    <div class="row pt-2">
+                        <div class="col-sm-12">
+                            <div class="row mb-2">
+                                <div class="col-sm-6">
+                                    <h2>Engaging and relating</h2>
+                                </div>
+                                <div class="col-sm-6">
+                                    <span class="float-right">
+                                        <a class="btn btn-light sres-clickable sres-dashboard-intelligence-carousel-prev" role="button" aria-label="Previous item">
+                                            <span class="fa fa-chevron-left"></span>
+                                        </a>
+                                        <a class="btn btn-light sres-clickable sres-dashboard-intelligence-carousel-pause" data-sres-state="cycle" role="button" aria-label="Pause carousel">
+                                            <span class="fa fa-pause"></span>
+                                        </a>
+                                        <a class="btn btn-light sres-clickable sres-dashboard-intelligence-carousel-next" role="button" aria-label="Next item">
+                                            <span class="fa fa-chevron-right"></span>
+                                        </a>
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="carousel slide row" data-ride="carousel" id="dashboard_intelligence_carousel">
+                                <div class="col-sm-12 carousel-inner" id="dashboard_intelligence_container">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row pt-2 mt-4">
+                        <div class="col-sm-12">
+                            <h2>Pinned
+                                <div class="float-right small">
+                                    <span class="fa fa-question-circle" data-tippy-content="Pin lists, filters, portals, and other elements here for easy access. Pinned lists are also 'watched' so SRES can provide some intelligent suggestions above."></span>
+                                </div>
+                            </h2>
+                        </div>
+                        <div class="col-sm-12">
+                            <div class="row" id="dashboard_pinned_assets_container">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row pt-2 mt-4">
+                        <div class="col-sm-12">
+                            <h2>Recently accessed by me</h2>
+                            <div class="row" id="dashboard_recents_container">
+                            </div>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="row pt-2">
+                        <div class="col-sm-12">
+                            Sorry, you don't appear to have administrator level access to SRES.
+                            You may have permissions to enter data - see the active data entry menu.
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+            
+            {% if '_list' in vars.admin_levels or vars.is_list_admin_somewhere or vars.is_list_auditor_somewhere %}
+                <div class="tab-pane pt-2 fade" id="lists" role="tabpanel" aria-labelledby="lists-tab">
+                    <div class="row">
+                        <div class="col-sm-9">
+                            <h1>{{ vars.tabs_meta.lists.display }}</h1>
+                            <p>{{ vars.tabs_meta.lists.hint }}</p>
+                        </div>
+                        <div class="col-sm-3">
+                            {% if "_super" in vars.admin_levels or "_list" in vars.admin_levels %}
+                                <a class="btn btn-success float-right mt-3" role="button" href="{{ url_for('table.new_table') }}"><span class="fa fa-plus"></span> Create new list</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <h2>Recently active lists</h2>
+                            <div class="row" id="recent_lists_container">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-4 mb-2">
+                        <div class="col-sm-9">
+                            <h2>All my lists</h2>
+                        </div>
+                        <div class="col-sm-3">
+                            <select id="lists_show_archived" class="form-control mb-2" aria-label="Toggle visibility of archived lists">
+                                <option value="hide">Hide archived lists</option>
+                                <option value="show">Show archived lists</option>
+                            </select>
+                        </div>
+                    </div>
+                    <table id="table_lists" class="table table-hover sres-asset-table">
+                        <thead>
+                            <tr>
+                                <th>Year</th>
+                                <th>{{ _('Semester') }}</th>
+                                <th>{{ _('Unit code') }}</th>
+                                <th>{{ _('Unit name') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
+                
+            {% if '_filter' in vars.admin_levels %}
+                <div class="tab-pane pt-2 fade" id="filters" role="tabpanel" aria-labelledby="filters-tab">
+                    <div class="row">
+                        <div class="col-sm-9">
+                            <h1>{{ vars.tabs_meta.filters.display }}</h1>
+                            <p>{{ vars.tabs_meta.filters.hint }}</p>
+                        </div>
+                        <div class="col-sm-3">
+                            <a class="btn btn-success float-right mt-3" role="button" href="{{ url_for('filter.new_filter') }}"><span class="fa fa-plus"></span> Create new filter</a>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <h2>Recently active filters</h2>
+                            <div class="row" id="recent_filters_container">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-4 mb-2">
+                        <div class="col-sm-12">
+                            <h2>All my filters</h2>
+                        </div>
+                    </div>
+                    <table id="table_filters" class="table table-hover sres-asset-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Last modified</th>
+                                <th>Run on</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
+            
+            {% if '_list' in vars.admin_levels or '_super' in vars.admin_levels %}
+                <div class="tab-pane pt-2 fade" id="portals" role="tabpanel" aria-labelledby="portals-tab">
+                    <div class="row">
+                        <div class="col-sm-9">
+                            <h1>{{ vars.tabs_meta.portals.display }}</h1>
+                            <p>{{ vars.tabs_meta.portals.hint }}</p>
+                        </div>
+                        <div class="col-sm-3">
+                            <a class="btn btn-success float-right mt-3" role="button" href="{{ url_for('portal.new_portal') }}"><span class="fa fa-plus"></span> Create new portal</a>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <h2>Recently active portals</h2>
+                            <div class="row" id="recent_portals_container">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-4 mb-2">
+                        <div class="col-sm-12">
+                            <h2>All my portals</h2>
+                        </div>
+                    </div>
+                    <table id="table_portals" class="table table-hover sres-asset-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Last modified</th>
+                                <th>Available?</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
+            
+            {% if '_list' in vars.admin_levels or vars.is_list_admin_somewhere %}
+                <div class="tab-pane pt-2 fade" id="insights" role="tabpanel" aria-labelledby="insights-tab">
+                    <div class="row">
+                        <div class="col-sm-9">
+                            <h1>{{ vars.tabs_meta.insights.display }}</h1>
+                            <p>{{ vars.tabs_meta.insights.hint }}</p>
+                        </div>
+                        <div class="col-sm-3">
+                            <a class="btn btn-success float-right mt-3" role="button" href="{{ url_for('insight.new_insight') }}"><span class="fa fa-plus"></span> Create new insight</a>
+                        </div>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-sm-12">
+                            <h2>All my insights</h2>
+                        </div>
+                    </div>
+                    <table id="table_insights" class="table table-hover sres-asset-table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Last modified</th>
+                                <th>Active?</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
+            
+            {% if '_list' in vars.admin_levels or '_super' in vars.admin_levels %}
+                <div class="tab-pane pt-2 fade" id="collective" role="tabpanel" aria-labelledby="collective-tab">
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <h1>{{ vars.tabs_meta.collective.display }}</h1>
+                            <p>{{ vars.tabs_meta.collective.hint }}</p>
+                            <a class="btn btn-primary" role="button" href="{{ url_for('collective.view_collective') }}">Browse and search the Collective for more inspiration</a>
+                        </div>
+                    </div>
+                    <div class="row mb-1 mt-3">
+                        <div class="col-sm-12">
+                            <h2>A sample from the Collective</h2>
+                            <div id="collective_assets_container" class="row">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+            
+            {% if '_list' in vars.admin_levels or '_super' in vars.admin_levels %}
+                <div class="tab-pane pt-2 fade" id="tags" role="tabpanel" aria-labelledby="tags-tab">
+                    <h1>{{ vars.tabs_meta.tags.display }}</h1>
+                    <a href="{{ url_for('tags.tags') }}" class="mt-2 btn btn-primary">Browse current tags and create your own</a>
+                </div>
+            {% endif %}
+            
+            <div class="tab-pane pt-2 fade" id="data_entry" role="tabpanel" aria-labelledby="data_entry-tab">
+                <div class="row">
+                    <div class="col-sm-12">
+                        <h1>{{ vars.tabs_meta.data_entry.display }}</h1>
+                        <p>{{ vars.tabs_meta.data_entry.hint }}</p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-sm-12">
+                        <div id="data_entry_links_container">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {% if '_list' in vars.admin_levels or '_super' in vars.admin_levels %}
+                <div class="tab-pane pt-2 fade" id="search" role="tabpanel" aria-labelledby="search-tab">
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <h1>{{ vars.tabs_meta.search.display }}</h1>
+                            <p>{{ vars.tabs_meta.search.hint }}</p>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <div class="form-group">
+                                <label class="sres-form-label">Search in: </label>
+                                {% for haystack in vars.search_sres_haystacks %}
+                                    <span class="mr-2">
+                                        <input type="checkbox" {% if haystack.checked_by_default %}checked{% endif %} 
+                                            name="search_sres_haystack_types" value="{{ haystack.type }}" 
+                                            data-on="<i class='fa fa-{{ haystack.display_icon }}'></i> {{ haystack.display }}" 
+                                            data-off="{{ haystack.display }}"
+                                            data-tippy-content="{{ haystack.hint }}">
+                                    </span>
+                                {% endfor %}
+                            </div>
+                            <div class="input-group mb-3">
+                                <input type="text" name="search_sres_term" id="search_sres_term" class="form-control" placeholder="Search for...">
+                                <div class="input-group-append">
+                                    <button type="button" class="btn btn-primary" id="search_sres_search">
+                                        <span class="fa fa-search"></span> Search
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row d-none" id="search_sres_results_header">
+                        <div class="col-sm-12">
+                            <h2>Search results</h2>
+                            <div class="alert alert-info d-none" id="search_sres_results_too_many">
+                                <span class="fa fa-exclamation-triangle"></span>
+                                <span id="search_sres_results_too_many_count"></span> results were found. Only showing the first 100. Please refine your search.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row" id="search_sres_results_container">
+                    </div>
+                </div>
+            {% endif %}
+                
+            {% if '_super' in vars.admin_levels %}
+                <div class="tab-pane pt-2 fade" id="superadmin" role="tabpanel" aria-labelledby="superadmin-tab">
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <h1>{{ vars.tabs_meta.superadmin.display }}</h1>
+                            <p>{{ vars.tabs_meta.superadmin.hint }}</p>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <a href="{{ url_for('admin.edit_administrators') }}" class="btn btn-outline-primary mr-1 mb-2"><span class="fa fa-user-shield"></span> Edit administrators</a>
+                            <a href="{{ url_for('admin.view_scheduled_jobs') }}" class="btn btn-outline-primary mr-1 mb-2"><span class="fa fa-clock"></span> View scheduled jobs</a>
+                            <a href="{{ url_for('admin.act_as') }}"              class="btn btn-outline-primary mr-1 mb-2"><span class="fa fa-mask"></span> Act as username</a>
+                            <a href="{{ url_for('admin.edit_users') }}"          class="btn btn-outline-primary mr-1 mb-2"><span class="fa fa-user"></span> Edit users</a>
+                            <a href="{{ url_for('admin.add_users_bulk') }}"      class="btn btn-outline-primary mr-1 mb-2"><span class="fa fa-users"></span> Bulk add users</a>
+                            <a href="{{ url_for('admin.view_feedback_logs') }}"  class="btn btn-outline-primary mr-1 mb-2"><span class="fa fa-comment"></span> View recent feedback logs</a>
+                            <a href="{{ url_for('admin.manage_db_indexes') }}"   class="btn btn-outline-primary mr-1 mb-2"><span class="fa fa-database"></span> Check database indexes</a>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+            
+            {% if vars.is_user_admin_somewhere %}
+                <div class="tab-pane pt-2 fade" id="help" role="tabpanel" aria-labelledby="help-tab">
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <h1>{{ vars.tabs_meta.help.display }}</h1>
+                            <p>{{ vars.tabs_meta.help.hint }}</p>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-sm-12">
+                            {% if vars.help_html_page %}
+                                {{ vars.help_html_page|safe }}
+                            {% else %}
+                                <h2>Guides and resources</h2>
+                                <ul>
+                                    <li>
+                                        <a href="https://bit.ly/sres-tutorials-2" target="_blank">Introductory tutorial guide</a>
+                                        This guide has step-by-step instructions and plenty of screenshots to help you get started with creating your own list in SRES to house student data.
+                                        It guides you through capturing and collecting data on student achievement, engagement, and outcomes from in-class activities, the LMS, students, and spreadsheets.
+                                        It also guides you through simple approaches to give students personalised support and feedback through tailored emails and customised web pages.
+                                    </li>
+                                    <li>
+                                        <a href="https://bit.ly/sres-tutorials-1" target="_blank">Intermediate/advanced tutorial guide</a>
+                                        This more advanced guide shows you innovative and evidence-based ways to engage and relate with your students using SRES.
+                                        It covers the basics of setting up a list in SRES to house student data, and moves onto discussing how to set up SRES to find out relevant information from your students directly.
+                                        The section on assessment and feedback provides a range of ideas on efficient marking and giving personalised feedback using SRES, including encouraging self-reflection and peer feedback approaches.
+                                        There is information on using SRES to support experiential learning, attendance, and participation, including how students can access SRES themselves to enter relevant information.
+                                    </li>
+                                </ul>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+            
+        </div>
+    
+    </div>
+    
+    <!--- confirm delete modal --->
+    <div class="modal fade" id="confirm_delete" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Are you sure?</h4>
+                </div>
+                <div class="modal-body">
+                    <span class="glyphicon glyphicon-alert" aria-hidden="true"></span>
+                    <span id="confirm_delete_message">Are you sure you wish to proceed?</span>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Back to safety!</button>
+                    <button type="button" id="confirm_delete_delete" class="btn btn-danger">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+{% endblock %}

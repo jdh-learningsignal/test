@@ -1,0 +1,96 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+    View insight - {{ insight.config.name }}
+{% endblock %}
+
+{% block head_css2 %}
+{% endblock %}
+
+{% block head_js2 %}
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col">
+            <h2>Preview {{ insight.config.name }}</h2>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col">
+            <div class="form-group row">
+                <label class="col-sm-2 col-form-label sres-form-label">Insight</label>
+                <div class="col-sm-10">
+                    {{ insight.config.name }}
+                    <span class="text-muted">{{ insight.config.description }}
+                    <a href="{{ url_for('insight.edit_insight', insight_uuid=insight.config.uuid) }}" class="btn btn-outline-primary"><span class="fa fa-pen"></span> Edit</a>
+                </div>
+            </div>
+            <div class="form-group row">
+                <label class="col-sm-2 col-form-label sres-form-label">Alerts to deliver</label>
+                <div class="col-sm-10">
+                    <ul>
+                        {% for alert in alerts %}
+                            <li>
+                                <a href="#alert_{{ loop.index }}">
+                                    To {{ alert.to }}
+                                    {% if alert.cc %}CC {{ alert.cc }}{% endif %}
+                                </a>
+                                {% if alert.skipped %}
+                                    <span class="fa fa-bell-slash"></span> This alert will be skipped
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            <div class="form-group row">
+                <label class="col-sm-2 col-form-label sres-form-label">Alerts</label>
+                <div class="col-sm-10">
+                    {% for alert in alerts %}
+                        <div class="row mt-2" id="alert_{{ loop.index }}">
+                            <div class="col border rounded p-3">
+                                {% if alert.skipped %}
+                                    <div class="alert alert-warning">
+                                        <span class="fa fa-bell-slash"></span>
+                                        This alert will be skipped; it will not be emailed.
+                                    </div>
+                                {% endif %}
+                                <div>
+                                    <label class="sres-form-label">To:</label> {{ alert.to }}
+                                    {% if alert.cc %}<label class="sres-form-label">CC:</label> {{ alert.cc }}{% endif %}
+                                </div>
+                                <div>
+                                    <label class="sres-form-label">Subject:</label>
+                                    {{ alert.subject }}
+                                </div>
+                                <div>
+                                    <label class="sres-form-label">Body:</label>
+                                    <br>
+                                    {{ alert.body|safe_no_script }}
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+{% endblock %}

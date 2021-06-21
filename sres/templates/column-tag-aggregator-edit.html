@@ -1,0 +1,90 @@
+{% extends 'base-staff.html' %}
+
+{% import 'collective-share.html' as collective_share %}
+{% import 'select-users.html' as select_users %}
+
+{% if vars.collective_sharing and vars.collective_sharing_mode == 'show' %}
+    {% set table_uuid = 'collective' %}
+{% else %}
+    {% set table_uuid = table.config.uuid %}
+{% endif %}
+
+{% block title %}
+  Add new tag aggregator column
+{% endblock %}
+
+{% block head_css2 %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/jquery.multi-select.css') }}">
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/jquery.multi-select.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jquery.quicksearch.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.column-tag-aggregator-edit.js') }}"></script>
+{% endblock %}
+
+{% block body %}
+
+    
+<h1>Create a one-time tag aggregation column</h1>
+
+<h4>In {{ table.config.code }} {{ table.config.name }} ({{ table.config.year }} semester {{ table.config.semester }})</h4>
+
+
+    <div class="row">
+        <div class="col">
+            <div class="alert alert-info">
+                <p><span class="fa fa-flask" aria-hidden="true"></span> Tag aggregator columns are still very experimental. Please report any breakages.</p>
+                <p>A new tag aggregation column will be generated, which generates a sum and percentage (percentage can only be calculated where maximum values exist for that column/multientry component) for each tag. Please note that the percentages are only displayed to one decimal place.</p>
+                <p>Tags which are already applied to columns/components of multientry components can be viewed on the <a href="{{ url_for('table.visualise_tags', table_uuid=table.config.uuid) }}">visualise tags</a> page for this list.</p>
+                <p><span class="fa fa-exclamation-triangle" aria-hidden="true"></span> A tag aggregation column does not automatically recalculate. It is only recalculated once when it is created and not again.</p>
+            </div>
+        </div>
+    </div>
+
+    <form method="POST" action="{{ url_for('table.edit_column', table_uuid=table_uuid, column_uuid=column.config.uuid, mode='tag_aggregator') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <div class="form-group row">
+        <label class="col-sm-2 col-form-label sres-form-label">Column name</label>
+        <div class="col-sm-10">
+          <input type="text" name="columnname" value="{{ request.form.columnname or column.config.name }}" class="form-control" required>
+        </div>
+      </div>
+      
+      <div class="form-group row">
+        <label class="col-sm-2 col-form-label sres-form-label">Column description</label>
+        <div class="col-sm-10">
+          <input type="text" name="columndescription" value="{{ request.form.columndescription or column.config.description }}" class="form-control">
+        </div>
+      </div>
+
+      <div class="card-body">
+        <div class="row">
+          <div class="col">
+            <h6>Choose columns to aggregate (source columns)</h6>
+          </div>
+        </div>
+        <div class="row">
+          <div class="col">
+            <select id="select_attributes" multiple="multiple" name="select_attributes" class="sres-multiselect-dynamic-column-receiver">
+              {% for table_instance in vars.authorised_tables_instances %}
+                {% for column_to_show in table_instance.get_select_array(show_collapsed_multientry_option=true, hide_multientry_subfields=true) %}
+                  <option value="{{ column_to_show.value }}">{{ column_to_show.full_display_text}}</option>
+                {% endfor %}
+              {% endfor %}
+            </select>
+            <input type="hidden" name="select_attributes_columns_ordered" value="{{ request.form.select_attributes_columns_ordered or column.config.aggregation_options.attributes|jsondump }}">
+          </div>
+        </div>
+      </div>
+      <input type="hidden" name="action" value="{{ vars.mode }}_tag_aggregator">
+
+      <div class="panel panel-primary">
+        <div class="panel-body">
+	  <input type="submit" name="submit_button" value="Save" class="btn btn-primary" />
+        </div>
+      </div>
+    
+  </form>
+
+{% endblock %}

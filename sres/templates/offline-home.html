@@ -1,0 +1,38 @@
+{% extends 'base-add-value.html' %}
+
+{% block title %}
+    Offline home - SRES
+{% endblock %}
+
+{% block head_css2 %}
+{% endblock %}
+
+{% block head_js2 %}
+	<script src="{{ url_for('static', filename='js/sres.offline.index.js') }}"></script>
+	<script>
+        var swUrl = '{{ url_for("entry.add_value_service_worker") }}' + '?pingUrl=' + '{{ url_for("static", filename="js/sres.ping.js", _external=True) }}';
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register(swUrl).then(function(registration) {
+                    // Registration was successful
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                }, function(err) {
+                    // registration failed :(
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
+        }
+    </script>
+{% endblock %}
+
+{% block body %}
+    <div class="row">
+        <div class="col">
+            <h2>Offline pages available on this device</h2>
+            <div id="offline_pages_list_container">
+                <div id="offline_pages_list">
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

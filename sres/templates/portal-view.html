@@ -1,0 +1,332 @@
+{% extends 'base.html' %}
+
+{% block title %}
+    Portal
+{% endblock %}
+
+{% block head_css2 %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chosen.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/vmsg.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-select.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ion.rangeSlider.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sres.portal-view.css') }}">
+    {% if vars.previewing %}
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/sres.algolia-autocomplete.css') }}">
+    {% endif %}
+    {% if vars.max_width %}
+        <style>
+            .sres-body {
+                max-width: {{ vars.max_width }}px;
+            }
+        </style>
+    {% endif %}
+    {% if vars.required_libraries and 'wordcloud' in vars.required_libraries %}
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/jqcloud.min.css') }}">
+    {% endif %}
+{% endblock %}
+
+{% block head_js2 %}
+    <script>
+        ENV['portal_uuid'] = "{{ portal.config.uuid }}";
+        ENV['POST_LOG_EVENT_ENDPOINT'] = "{{ url_for('portal.log_event', portal_uuid=portal.config.uuid)|safe }}";
+        ENV['POST_FEEDBACK_EVENT_ENDPOINT'] = "{{ url_for('portal.feedback_event', portal_uuid=portal.config.uuid)|safe }}";
+        ENV['SEND_DATA_ENDPOINT'] = "{{ url_for('portal.set_data', portal_uuid=portal.config.uuid)|safe }}";
+        ENV['GET_DATA_ENDPOINT'] = "{{ url_for('portal.get_data', portal_uuid=portal.config.uuid, column_uuid='__column_uuid__', identifier='__identifier__', report_index='__report_index__')|safe }}";
+        ENV['SEND_RICH_DATA_ENDPOINT'] = "{{ url_for('portal.set_data', portal_uuid=portal.config.uuid)|safe }}";
+        ENV['PORTAL_PREVIEW_ENDPOINT_RANDOM'] = "{{ url_for('portal.view_portal', portal_uuid=portal.config.uuid, preview=1)|safe }}";
+        ENV['PORTAL_PREVIEW_ENDPOINT_IDENTIFIED'] = "{{ url_for('portal.view_portal', portal_uuid=portal.config.uuid, preview=1, identifier='__identifier__')|safe }}";
+        ENV['GET_FILE_ENDPOINT'] = '{{ url_for("file.get_file", filename="__filename__", _external=True) }}';
+        ENV['auth_user'] = "{{ vars.auth_user }}";
+        ENV['rangeslider_config'] = {{ vars.rangeslider_config|tojson }};
+        ENV['DISABLE_FEEDBACK_REQUEST'] = {{ vars.disable_feedback_request|tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/ajaxq.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/chosen.jquery.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/localforage.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tinymce/tinymce.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tinymce/jquery.tinymce.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/capture_image.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/bs-custom-file-input.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/bootstrap-select.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ion.rangeSlider.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.rangeslider.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sketchable.utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jsketch.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sketchable.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.sketch.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.multientry.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.record-audio.js') }}" type="module"></script>
+    <script src="{{ url_for('static', filename='js/sres.add-value-shared.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.add-value.accordion-sets.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.portal-view.js', rand=range(1000,9999)|random|string) }}"></script>
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    {% if vars.previewing %}
+        <script src="{{ url_for('static', filename='js/sres.anonymiser-toggle.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/autocomplete.jquery.min.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/sres.portal-preview.js', rand=range(1000,9999)|random|string) }}"></script>
+        <script>
+            ENV['GET_STUDENTS_ENDPOINT'] = "{{ url_for('portal.get_students', portal_uuid=portal.config.uuid) }}";
+            ENV['ANONYMISER_TOGGLE_ENDPOINT'] = '{{ url_for("index.toggle_anonymiser", _external=True) }}';
+        </script>
+        {% raw %}
+            <script id="search_student_result_line_template" type="text/x-handlebars-template">
+                <span data-sres-identifier="{{sid}}">
+                    <strong>{{displayName}}</strong>
+                    {{sid}}
+                </span>
+            </script>
+            <script id="student_list_item_template" type="text/x-handlebars-template">
+                <a href="{{href}}" data-sres-identifier="{{sid}}" class="list-group-item list-group-item-action sres-student-list-item">
+                    <span>
+                        {{displayName}}
+                        <span class="font-italic text-muted float-right">{{displaySid}}</span>
+                    </span>
+                </a>
+            </script>
+        {% endraw %}
+    {% endif %}
+    {% if vars.required_libraries and 'wordcloud' in vars.required_libraries %}
+        <script src="{{ url_for('static', filename='js/jqcloud.min.js') }}"></script>
+    {% endif %}
+    {% if vars.required_libraries and 'summary-draw' in vars.required_libraries %}
+        <script>
+            ENV['GET_REPRESENTATION_DATA_ENDPOINT'] = "{{ url_for('summary.view_representation', table_uuid='undefined', col='__col__', calc_mode='__calc_mode__', pres_mode='__pres_mode__', group_mode='__group_mode__', group_col='__group_col__', group_vals='__group_vals__', group_comp_mode='__group_comp_mode__')|safe }}";
+        </script>
+        <script src="{{ url_for('static', filename='js/sres.summary-draw.js', rand=range(1000,9999)|random|string) }}"></script>
+    {% endif %}
+    {% if vars.required_libraries and 'google-charts' in vars.required_libraries %}
+        <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+        <script type="text/javascript">
+            google.charts.load('current', {'packages':['bar', 'corechart']});
+        </script>
+    {% endif %}
+{% endblock %}
+
+{% block nav %}
+    {% if vars.previewing or vars.logged_in_user_role == 'teacher' or vars.logged_in_user_role == 'viewer' %}
+        <div class="row bg-primary text-white m-0 p-2">
+            <div class="col form-inline">
+                {% if vars.logged_in_user_role == 'administrator' %}
+                    <span class="mr-2">
+                        You are currently previewing student portal <strong>{{ portal.config.name }}</strong> as an administrator of this portal.
+                        When students view this, they will just see their own personalised portal and not this blue bar.
+                    </span>
+                    {% if vars.available.available %}
+                        <span class="mr-2">
+                            <span class="fa fa-check-circle"></span>
+                            This portal is currently available to students.
+                        </span>
+                    {% else %}
+                        <span class="text-warning mr-2">
+                            <span class="fa fa-exclamation-circle"></span>
+                            This portal is currently unavailable to students.
+                            {% for message in vars.available.messages %}
+                                {{ message[0] }}
+                            {% endfor %}
+                        </span>
+                    {% endif %}
+                    <a href="{{ url_for('portal.edit_portal', portal_uuid=portal.config.uuid) }}" role="button" class="btn btn-outline-light" id="edit_student_view">
+                        <span class="fa fa-pen" aria-hidden="true"></span> Edit portal
+                    </a>
+                {% else %}
+                    <span class="mr-2">
+                        You are currently viewing the portal <strong>{{ portal.config.name }}</strong> as a {{ vars.logged_in_user_role }}.
+                    </span>
+                {% endif %}
+            </div>
+            <div class="col float-right align-self-center">
+                <div class="text-dark input-group justify-content-end">
+                    <input type="text" placeholder="Student identifier" id="preview_identifier" class="form-control my-1" value="{{ vars.auth_user }}" aria-label="Enter a student identifier to preview portal" />
+                    <button type="button" class="btn btn-outline-light ml-1 my-1" id="show_student_view" aria-label="View entered student" data-tippy-content="View entered student">
+                        <span class="fa fa-eye" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="btn btn-outline-light ml-1 my-1" id="preview_random_student" aria-label="Preview random student" data-tippy-content="Preview random student">
+                        <span class="fa fa-random" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="btn btn-outline-light ml-1 my-1" id="show_student_list" aria-label="Show list of students" data-tippy-content="Show list of students">
+                        <span class="fa fa-list" aria-hidden="true"></span>
+                    </button>
+                    <button class="btn btn-outline-light ml-1 my-1 sres-anonymiser-toggle" data-sres-identity-anonymiser-active="{{ session.get('identity_anonymiser_active', false) }}">
+                        <span class="fa fa-user-secret" aria-hidden="true"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+{% endblock %}
+
+{% block body %}
+    
+    {% import 'add-value-modules.html' as add_value_modules %}
+    
+    <main>
+    
+    <div class="mb-3">
+    </div>
+    
+    <div class="float-right d-print-none">
+        <a href="#" class="text-muted" aria-label="Print this page" onclick="window.print();">
+            <span class="fa fa-print" aria-hidden="true" title="Print this page"></span>
+        </a>
+        <a href="{{ url_for('login.logout', next=url_for('portal.view_portal', portal_uuid=portal.config.uuid)) }}" class="text-muted" aria-label="Log out">
+            <span class="fa fa-sign-out-alt" aria-hidden="true" title="Log out"></span>
+        </a>
+    </div>
+    
+    {% set collapsible_panel_set = namespace(set_number=0, collapsed=false) %}
+    
+    {% for panel in panels %}
+        
+        {% if panel.collapsible == 'enabled' %}
+            {% set collapsible_panel_set.set_number = collapsible_panel_set.set_number + 1 %}
+            {% set collapsible_panel_set.collapsed = true if panel.collapsible_default_display == 'collapse' else false %}
+        {% elif panel.collapsible == 'disabled' %}
+            {% set collapsible_panel_set.set_number = collapsible_panel_set.set_number + 1 %}
+            {% set collapsible_panel_set.collapsed = false %}
+        {% elif panel.collapsible == 'linked' %}
+            {# do not increment set number #}
+            {# do not change collapsed state #}
+        {% endif %}
+        
+        {% if panel.collapsible == 'enabled' %}
+            <div class="float-right /*animated flash infinite sres-collapsible-panel-controller*/ pb-2">
+                <button type="button"
+                    class="btn btn-outline-primary rounded-circle sres-collapsible-panel-controller-expand {% if collapsible_panel_set.collapsed %}{% else %}d-none{% endif %}" 
+                    data-sres-collapsible-panel-set-number="{{ collapsible_panel_set.set_number }}" data-tippy-content="Expand panel" title="Expand panel">
+                    <span class="fa fa-chevron-down" aria-label="Expand panel"></span>
+                </button>
+                <button type="button"
+                    class="btn btn-outline-primary rounded-circle sres-collapsible-panel-controller-collapse {% if collapsible_panel_set.collapsed %}d-none{% else %}{% endif %}" 
+                    data-sres-collapsible-panel-set-number="{{ collapsible_panel_set.set_number }}" data-tippy-content="Collapse panel" title="Collapse panel">
+                    <span class="fa fa-chevron-up" aria-label="Collapse panel"></span>
+                </button>
+            </div>
+        {% endif %}
+        
+        <div data-sres-collapsible-panel-set-number="{{ collapsible_panel_set.set_number }}"
+            data-sres-panel-number="{{ loop.index }}"
+            data-sres-collapsible-mode="{{ panel.collapsible }}"
+            {% if panel.collapsible == 'enabled' or panel.collapsible == 'linked' -%}
+                {%- if collapsible_panel_set.collapsed -%}
+                    class="sres-collapsible-panel pb-2 sres-panel-collapse-collapsed"
+                {%- else -%}
+                    class="sres-collapsible-panel pb-2 sres-panel-collapse-shown"
+                {%- endif -%}
+            {%- else -%}
+                class="sres-collapsible-panel pb-2"
+            {%- endif %}
+        >
+        
+        {% if panel.render == 'html' %}
+            
+            {{ panel.content|safe_no_script }} {# User-specified content is escaped upstream. #}
+            
+            {{ panel.scripts|safe }}
+            
+        {% elif panel.render == 'input' %}
+            
+            {{ add_value_modules.add_value_module(
+                table=panel.table, 
+                column=panel.column,
+                student_identifier=panel.student_identifier,
+                unique_string=panel.unique_string,
+                callback_function_name='sendData',
+                auth_user=panel.student_identifier, 
+                data_to_display=panel.data_to_display, 
+                mode='single', 
+                readonly=panel.readonly, 
+                load_script=True,
+                multiple_reports_meta=panel.multiple_reports_meta)
+            }}
+            
+            {% if panel.trigger_reload_on_save %}
+                <script>
+                    $(document).on('sres:datasaved', function(event, args) {
+                        if (args.panelNumber.toString() == '{{ loop.index }}') {
+                            window.location.reload();
+                        }
+                    });
+                </script>
+            {% endif %}
+            
+        {% endif %}
+        
+        </div>
+        
+    {% endfor %}
+    
+    
+    </main>
+    
+    {% if portal.config.reload_portal_interval|float %}
+        <script>
+            $(document).ready(function(){
+                setTimeout( function(){ window.location.reload() }, {{ portal.config.reload_portal_interval|float }} * 60000 );
+            });
+        </script>
+    {% endif %}
+    
+    {% if portal.config.feedback.options %}
+        <div class="sres-portal-feedback-container d-none">
+            <div class="alert alert-info">
+                <input type="hidden" id="portal_feedback_event_oid" value="">
+                <input type="hidden" id="days_since_last_feedback_event" value="{{ vars.days_since_last_feedback_event }}">
+                <button type="button" class="close sres-portal-feedback-close">&times;</button>
+                <div class="mb-2">
+                    {{ portal.config.feedback.prompt }}
+                    <br>
+                    {% for option in portal.config.feedback.options %}
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="radio" name="sres_portal_feedback_options" id="sres_portal_feedback_option_{{ loop.index }}" value="{{ option.value }}">
+                            <label class="form-check-label" for="sres_portal_feedback_option_{{ loop.index }}">{{ option.display }}</label>
+                        </div>
+                    {% endfor %}
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="sres_portal_feedback_sleep" id="sres_portal_feedback_sleep">
+                        <label class="form-check-label" for="sres_portal_feedback_sleep">Ask me later</label>
+                    </div>
+                </div>
+                {% for option in portal.config.feedback.options %}
+                    {% set loop_index = loop.index %}
+                    <div data-sres-followup-prompt-parent-option="{{ option.value }}" class="mb-2 collapse">
+                        {% for followup_prompt in option.followup_prompts %}
+                            {% if followup_prompt.type == 'textarea' %}
+                                <label for="sres_portal_feedback_options_followup_prompt_{{ followup_prompt.name }}_{{ loop_index }}">{{ followup_prompt.prompt }}</label>
+                                <br>
+                                <textarea data-sres-followup-prompt-parent-option="{{ option.value }}" id="sres_portal_feedback_options_followup_prompt_{{ followup_prompt.name }}_{{ loop_index }}" name="sres_portal_feedback_options_followup_prompt_{{ followup_prompt.name }}_{{ loop_index }}" data-sres-followup-prompt-name="{{ followup_prompt.name }}" class="form-control sres-portal-feedback-followup-data"></textarea>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+                <div class="mb-1 sres-portal-feedback-submit collapse">
+                    <button type="button" class="btn btn-primary" id="sres_portal_feedback_submit">Submit</button>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+    
+    {% if vars.logged_in_user_role == 'administrator' or vars.logged_in_user_role == 'teacher' or vars.logged_in_user_role == 'viewer' %}
+        <div class="sres-pane">
+            <div class="row mb-2">
+                <div class="col">
+                    <h2 class="float-left">Choose a student</h2>
+                    <span class="float-right">
+                        <button type="button" class="close sres-pane-close" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </span>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col">
+                    <div id="student_list_container_loading" class="d-none">
+                        <span class="fa fa-circle-notch spinning" aria-label="Loading..."></span>
+                    </div>
+                    <div id="student_list_container" class="list-group">
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+    
+{% endblock %}

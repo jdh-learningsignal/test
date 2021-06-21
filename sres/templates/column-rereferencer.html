@@ -1,0 +1,70 @@
+{% macro column_rereferencer(available_tables=[]) %}
+
+{# 
+    available_tables (list of dicts from db.tables)
+#}
+
+<div id="column_rereferencer" class="modal fade" role="dialog" style="overflow-y: auto;">
+	<div class="modal-dialog modal-lg" role="document">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h4>Re-reference columns</h4>
+				<button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+			</div>
+			<div class="modal-body">
+				<div id="column_rereferencer_list_select_container">
+					<div class="mb-3">
+						This allows you to quickly update column references to point to a new list.
+                        It works by finding and suggesting the closest matches based on column names.
+					</div>
+					<label for="column_rereferencer_list_select">
+						Choose the list that columns should be re-referenced <em>to</em>
+					</label>
+					<select id="column_rereferencer_list_select">
+						<option value="">Choose a list</option>
+						{% for available_table in available_tables %}
+                            <option value="{{ available_table.uuid }}">{{ available_table.code }} ({{ available_table.year }} semester {{ available_table.semester }}) {{ available_table.name }}</option>
+						{% endfor %}
+					</select>
+				</div>
+                <div id="column_rereferencer_loading" class="d-none">
+                    <div>
+                        <span class="fa fa-sync-alt spinning"></span> Loading...
+                    </div>
+                </div>
+				<div id="column_rereferencer_column_suggestions" class="d-none">
+					<hr>
+					<div id="column_rereferencer_column_suggestions_hint" class="d-none alert alert-info">
+						<span class="fa fa-info-circle" aria-hidden="true"></span>
+						We've tried to find columns that match most closely.
+						For each existing column reference, you can run with our suggestions, choose your own, or elect not to re-reference it.
+					</div>
+					<div id="column_rereferencer_column_suggestions_failed" class="d-none alert alert-warning">
+						<span class="fa fa-exclamation-triangle" aria-hidden="true"></span>
+						Unfortunately we could not find any appropriate columns in the selected list.
+					</div>
+					<div id="column_rereferencer_column_suggestions_container">
+					</div>
+				</div>
+				<div id="column_rereferencer_tracking_counter" class="d-none">
+					<hr>
+					<div class="alert alert-danger">
+						<span class="fa fa-exclamation-triangle" aria-hidden="true"></span>
+						It seems that the tracking counter column (the column that tracks how many times messages are opened) may be pointing to a different list.
+						This means that the tracking may be inaccurate or not work at all.
+					</div>
+					<select class="form-control" id="column_rereferencer_tracking_counter_option">
+						<option value="">Thanks for letting me know, I'll handle it myself</option>
+						<option value="new">Create a new tracking column</option>
+					</select>
+				</div>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+				<input type="button" value="Apply new column references" id="column_rereferencer_button_do" class="btn btn-primary d-none" />
+			</div>
+		</div>
+	</div>
+</div>
+
+{% endmacro %}

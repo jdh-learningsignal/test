@@ -1,0 +1,815 @@
+{% macro column_chooser(available_tables=[], 
+                        column_chooser_disable_uuids=[], 
+                        student_info_items=[], 
+                        current_table_uuid='', 
+                        only_table_uuids=[],
+                        magic_formatters_list=[],
+                        general_fields_items=[],
+                        show_magic_formatters=True,
+                        modal_header=None,
+                        columns_tab_title=None,
+                        sda_only=False,
+                        base_only=False,
+                        show_summaries=False) 
+%}
+
+{# 
+
+    available_tables (list of dicts from db.tables)
+    column_chooser_disable_uuids (list of string uuids)
+    student_info_items
+    current_table_uuid
+    only_table_uuids (list of string uuids) Which table_uuids to show.
+        If empty list, show all available_tables
+    magic_formatters_list (columns.MAGIC_FORMATTERS_LIST)
+    general_fields_items
+    show_magic_formatters (bool)
+    modal_header (None|str) Override modal header.
+    columns_tab_title (None|str) Override tab title.
+    sda_only (bool) Whether to only return columns set for student direct access.
+    show_summaries (bool) Whether to show summaries or not.
+    
+#}
+
+<div id="column_chooser" class="modal fade" data-backdrop="false" role="dialog" style="z-index:5000;">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4>{% if modal_header %}{{ modal_header }}{% else %}Insert data{% endif %}</h4>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <ul class="nav nav-tabs" role="tablist">
+                    {% if student_info_items %}
+                        <li class="nav-item">
+                            <a class="nav-link active" id="column_chooser_tab_student_details-tab" href="#column_chooser_tab_student_details" data-toggle="tab" role="tab" aria-controls="column_chooser_tab_student_details" aria-selected="true">Student details</a>
+                        </li>
+                    {% endif %}
+                    <li class="nav-item">
+                        <a class="nav-link" id="column_chooser_tab_student_data-tab" href="#column_chooser_tab_student_data" data-toggle="tab" role="tab" aria-controls="column_chooser_tab_student_data" aria-selected="false">
+                            {% if columns_tab_title %}{{ columns_tab_title }}{% else %}Data from columns{% endif %}
+                        </a>
+                    </li>
+                    {% if general_fields_items %}
+                        <li class="nav-item">
+                            <a class="nav-link" id="column_chooser_tab_general_fields-tab" href="#column_chooser_tab_general_fields" data-toggle="tab" role="tab" aria-controls="column_chooser_tab_general_fields" aria-selected="false">General fields</a>
+                        </li>
+                    {% endif %}
+                    {% if show_summaries %}
+                        <li class="nav-item">
+                            <a class="nav-link" id="summary_chooser_tab_summaries-tab" href="#summary_chooser_tab_summaries" data-toggle="tab" role="tab" aria-controls="summary_chooser_tab_summaries" aria-selected="false">Summaries</a>
+                        </li>
+                    {% endif %}
+                </ul>
+                <div class="tab-content border-left border-bottom border-right p-3">
+                    {% if student_info_items %}
+                        <div class="tab-pane fade show active" id="column_chooser_tab_student_details" role="tabpanel" aria-labelledby="column_chooser_tab_student_details-tab">
+                            <label>Click to insert</label>
+                            <br>
+                            {% for student_info_item in student_info_items if student_info_item.insertable %}
+                                <button type="button" class="btn btn-outline-primary mt-2" value="{{ student_info_item.insert_value }}">{{ student_info_item.display }}</button>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <div class="tab-pane fade" id="column_chooser_tab_student_data" role="tabpanel" aria-labelledby="column_chooser_tab_student_data-tab">
+                        <label>Choose a list</label>
+                        <select name="column_chooser_table_list" id="column_chooser_table_list">
+                            {% for available_table in available_tables if (only_table_uuids|length == 0 or available_table.uuid in only_table_uuids) %}
+                                <option value="{{ available_table.uuid }}">{{ available_table.code }} ({{ available_table.year }} semester {{ available_table.semester }}) {{ available_table.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <p id="column_chooser_column_list_loading" class="d-none mt-3"><span class="fa fa-sync-alt spinning"></span> Loading...</p>
+                        <label class="mt-3">Column</label>
+                        <div id="column_chooser_column_list_container" class="d-none">
+                            <select name="column_chooser_column_list" id="column_chooser_column_list"></select>
+                            <input type="hidden" id="column_chooser_disable_uuids" value="{{ column_chooser_disable_uuids|tojson }}">
+                        </div>
+                        <div id="column_chooser_column_magic_formatter_container" class="d-none">
+                            <br>
+                            <label>Magic formatter</label>
+                            <a href="#column_chooser_column_magic_formatter_select_container" data-toggle="collapse" aria-expanded="false">
+                                <span class="fa fa-angle-down sres-collapse-caret"></span>
+                            </a>
+                            <div id="column_chooser_column_magic_formatter_select_container" class="collapse">
+                                <select id="column_chooser_column_magic_formatter" class="form-control">
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mt-3 text-right">
+                            <input type="button" value="Use this" id="column_chooser_button_do" class="btn btn-primary d-none" />
+                        </div>
+                    </div>
+                    {% if general_fields_items %}
+                        <div class="tab-pane fade" id="column_chooser_tab_general_fields" role="tabpanel" aria-labelledby="column_chooser_tab_general_fields-tab">
+                            <label>Click to insert</label>
+                            <br>
+                            {% for key, item in general_fields_items.items() %}
+                                <button type="button" class="btn btn-outline-primary mt-2" value="{{ item.field }}">{{ item.label }} ({{ item.hint }})</button>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    {% if show_summaries %}
+                        <div class="tab-pane fade" id="summary_chooser_tab_summaries" role="tabpanel" aria-labelledby="summary_chooser_tab_summaries-tab">
+                            <label>Choose a list</label>
+                            <select name="summary_chooser_table_list" id="summary_chooser_table_list">
+                                {% for available_table in available_tables if (only_table_uuids|length == 0 or available_table.uuid in only_table_uuids) %}
+                                    <option value="{{ available_table.uuid }}">{{ available_table.code }} ({{ available_table.year }} semester {{ available_table.semester }}) {{ available_table.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <p id="summary_chooser_summary_list_loading" class="d-none mt-3"><span class="fa fa-sync-alt spinning"></span> Loading...</p>
+                            <label class="mt-3">Summaries</label>
+                            <div id="summary_chooser_summary_list_container" class="d-none">
+                                <select name="summary_chooser_summary_list" id="summary_chooser_summary_list"></select>
+                            </div>
+                            <div class="mt-3 text-right">
+                                <input type="button" value="Use this" id="summary_chooser_button_do" class="btn btn-primary d-none" />
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+                <input type="hidden" value="" id="column_chooser_destination_id" />
+                <input type="hidden" id="column_chooser_enclosing_char" value="`" />
+                <input type="hidden" id="column_chooser_use_raw_sql" value="false" />
+                <input type="hidden" id="column_chooser_use_raw_uuid" value="false" />
+                <input type="hidden" id="column_chooser_preselected_table" value="" />
+                <input type="hidden" id="column_chooser_preselected_column" value="" />
+                <input type="hidden" id="column_chooser_datatype" value="" />
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="list_chooser" class="modal fade" role="dialog" style="z-index:5000;">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4>List chooser</h4>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <label>Choose the list(s) from which you would like to select columns</label>
+                <br>
+                <select name="list_chooser_table_list" id="list_chooser_table_list" multiple>
+                    {% for available_table in available_tables %}
+                        <option value="{{ available_table.uuid }}" {% if current_table_uuid == available_table.uuid %}selected{% endif %}>
+                            {{ available_table.code }} ({{ available_table.year }} semester {{ available_table.semester }}) {{ available_table.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+                <input type="button" value="OK" id="list_chooser_button_do" class="btn btn-primary" />
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    function showListChooser(){
+        $("#list_chooser").modal('show');
+        $("#list_chooser_table_list").chosen({width: '100%', search_contains: true});
+    }
+    function listChooserUpdateSelection(tableUuids){
+        // tableUuids as array of strings
+        $("#list_chooser_table_list").val(tableUuids).trigger('chosen:updated');
+    }
+    $(document).on('click', '#list_chooser_button_do', function(){
+        //console.log($("#list_chooser_table_list").val());
+        $("#list_chooser").modal('hide');
+        $(document).trigger(
+            'sres.listchooserclosed',
+            {
+                lists: $("#list_chooser_table_list").val()
+            }
+        );
+    });
+    $(document).on('click', '.sres-list-chooser-show-chooser', function(){
+        showListChooser();
+    });
+</script>
+
+<style>
+    .sres-column-reference-friendly {
+        background-color: #b3cffc;
+        padding: 3px;
+    }
+    .sres-column-reference-friendly-error {
+        background-color: #ffb677;
+        padding: 3px;
+    }
+</style>
+
+<script>
+    $('#column_chooser_button_do').on('click', function(event, data){
+        var table_name = $('#column_chooser_table_list').val();
+        var column_value = "";
+        var data_type = "";
+        var column_full_display = "";
+        if (data) {
+            column_value = data.field;
+        } else {
+            column_value = $('#column_chooser_column_list').val();
+            data_type = $('#column_chooser_column_list option:selected').attr('data-sres-datatype');
+            column_full_display = $('#column_chooser_column_list option:selected').attr('data-sres-full-display');
+        }
+        var enclosing_char = $('#column_chooser_enclosing_char').val();
+        var destination_id = $('#column_chooser_destination_id').val();
+        var use_raw_sql = $('#column_chooser_use_raw_sql').val();
+        var use_raw_uuid = $('#column_chooser_use_raw_uuid').val();
+        //console.log(data_type);
+        var text_to_insert = '';
+        /** magic formatter **/
+        let magicFormatter = '';
+        if ($('#column_chooser_column_magic_formatter').val()) {
+            magicFormatter = '.' + $('#column_chooser_column_magic_formatter').val();
+        }
+        /** compose **/
+        /*if ((data_type == 'image' || data_type == 'imgurl') && use_raw_uuid == 'false') {
+            text_to_insert = enclosing_char + column_value + '.image' + enclosing_char;
+        } else if (data_type == 'file') {
+            text_to_insert = enclosing_char + column_value + '.file' + enclosing_char;
+        } else*/
+        if (data_type == 'image' && use_raw_uuid == 'true') {
+            text_to_insert = enclosing_char + column_value + enclosing_char;
+        } else {
+            text_to_insert = enclosing_char + column_value + magicFormatter + enclosing_char;
+        }
+        /** insert **/
+        $('#column_chooser').modal('hide');
+        //console.log(destination_id);
+        if (typeof tinymce != 'undefined' && typeof tinymce.editors[destination_id] != 'undefined') {
+            tinymce.editors[destination_id].insertContent(text_to_insert);
+        } else {
+            if ($('#' + destination_id)[0].type == 'hidden' && $('#' + destination_id)[0].tagName == 'INPUT') {
+                var tableuuid = $('#column_chooser_table_list').val().toUpperCase().replace('STUDENTLIST_', '');
+                $('#' + destination_id)
+                    .attr('data-sres-tableuuid', tableuuid)
+                    .val( $('select[name=column_chooser_column_list]').val() ).trigger('change')
+                    .siblings('span.sres-condition-column-placeholder')
+                        .text( $('select[name=column_chooser_column_list] option:selected').attr('data-sres-full-display') );
+            } else if ($('#' + destination_id)[0].type == 'select-one') {
+                if ($("#" + destination_id + " option[value='" + column_value + "']").length > 0) {
+                    $("#" + destination_id).val(column_value).trigger("change");
+                } else {
+                    $("#" + destination_id)
+                        .append('<option value="' + column_value + '">' + column_full_display + '</option>')
+                        .val(column_value)
+                        .trigger("change");
+                }
+            } else {
+                $('#' + destination_id)
+                    .insertAtCaret(text_to_insert)
+                    .trigger('change');
+            }
+        }
+        // broadcast
+        $(document).trigger('sres:columnreferenceinserted');
+    });
+    // quick buttons
+    $('#column_chooser_tab_general_fields button, #column_chooser_tab_student_details button').on('click', function(){
+        let fieldValue = $(this).val();
+        $('#column_chooser_button_do').trigger('click', [{field: fieldValue}]);
+    });
+    // showing column chooser
+    function show_column_chooser(dest_id, enclosing_char, display_id, raw_sql, raw_uuid, preselectedTable, preselectedColumn, hideStudentInfo, datatype, hideGeneralFieldsTab, hideSummariesTab){
+        /**
+            Shows the column chooser.
+            
+            dest_id (string) The DOM id of the element that will receive the selected column reference.
+            enclosing_char (string) The character that encloses the inserted column reference.
+            display_id (string)
+            raw_sql (boolean) DEPRECATED Whether to insert raw SQL. Now always will be set to false.
+            raw_uuid (boolean) Whether to inject the raw column reference (true), or 
+                to inject a magic-formatted reference for particular column types (false).
+            preselectedTable (string) Reference (usually UUID) to the table to be preselected when the modal displays.
+            preselectedColumn (string) Reference (usually UUID) to the column to be preselected when the modal displays.
+            hideStudentInfo (boolean) Whether to hide the student information option.
+            datatype (string) Column data type to limit column selector to.
+            hideGeneralFieldsTab (boolean) Whether to hide the general fields tab.
+            hideSummariesTab (boolean) Whether to hide the summaries tab.
+        **/
+        //console.log('showing', dest_id, enclosing_char, display_id, raw_sql, raw_uuid, preselectedTable, preselectedColumn, hideStudentInfo, datatype);
+        let previouslySelectedTable = $("#column_chooser_table_list").val();
+        if (typeof(enclosing_char) != 'undefined' && enclosing_char != null) {
+            $('#column_chooser_enclosing_char').val(enclosing_char);
+        } else if (typeof(raw_sql) != 'undefined' && raw_sql != null && raw_sql == true) {
+            $('#column_chooser_enclosing_char').val('`');
+        }
+        if (typeof(display_id) == 'undefined' || display_id == null) {
+            display_id = dest_id;
+        }
+        if (typeof(hideStudentInfo) == 'undefined' || hideStudentInfo == null) {
+            hideStudentInfo = false;
+        }
+        if (typeof(hideGeneralFieldsTab) == 'undefined' || hideGeneralFieldsTab == null) {
+            hideGeneralFieldsTab = false;
+        }
+        if (typeof(hideSummariesTab) == 'undefined' || hideSummariesTab == null) {
+            hideSummariesTab = false;
+        }
+        //$('#column_chooser_use_raw_sql').val(typeof(raw_sql) != 'undefined' && raw_sql != null ? raw_sql : false);
+        $('#column_chooser_use_raw_sql').val(false);
+        if (typeof(raw_uuid) != 'undefined' && raw_uuid != null) {
+            $('#column_chooser_use_raw_uuid').val(raw_uuid);
+        }
+        // hide tabs?
+        if (hideStudentInfo) {
+            $('#column_chooser_table_list option[value=student_info]')
+                .addClass('d-none').prop('disabled', true);
+            $('#column_chooser #column_chooser_tab_student_details-tab').addClass('d-none');
+            $('#column_chooser #column_chooser_tab_student_details').addClass('d-none');
+            $('#column_chooser_tab_student_data-tab').trigger('click');
+        } else {
+            $('#column_chooser_table_list option[value=student_info]')
+                .removeClass('d-none').removeProp('disabled');
+            $('#column_chooser #column_chooser_tab_student_details-tab').removeClass('d-none');
+            $('#column_chooser #column_chooser_tab_student_details').removeClass('d-none');
+        }
+        if (hideGeneralFieldsTab) {
+            $('#column_chooser #column_chooser_tab_general_fields-tab').addClass('d-none');
+            $('#column_chooser #column_chooser_tab_general_fields').addClass('d-none');
+        } else {
+            $('#column_chooser #column_chooser_tab_general_fields-tab').removeClass('d-none');
+            $('#column_chooser #column_chooser_tab_general_fields').removeClass('d-none');
+        }
+        if (hideSummariesTab) {
+            $('#column_chooser #summary_chooser_tab_summaries-tab').addClass('d-none');
+            $('#column_chooser #summary_chooser_tab_summaries').addClass('d-none');
+        } else {
+            $('#column_chooser #summary_chooser_tab_summaries-tab').removeClass('d-none');
+            $('#column_chooser #summary_chooser_tab_summaries').removeClass('d-none');
+        }
+        // set destination id
+        $('#column_chooser_destination_id').val(dest_id);
+        // display
+        $('#column_chooser')
+            .modal('show')
+            .find('.modal-dialog').draggable({
+                handle: ".modal-header"
+            });
+        $("#column_chooser_preselected_column").val( typeof preselectedColumn == 'undefined' || preselectedColumn == null ? '' : preselectedColumn);
+        $("#column_chooser_datatype").val( typeof datatype == 'undefined' || datatype == null ? '' : datatype);
+        if ( typeof preselectedTable != 'undefined' && preselectedTable != null) {
+            if (!hideStudentInfo && preselectedTable == '') {
+                // Default to student info
+                $("#column_chooser_preselected_table").val('student_info');
+            } else if (preselectedTable === '') {
+                if (previouslySelectedTable == 'student_info' && hideStudentInfo) {
+                    $("#column_chooser_table_list").val('--thisdoesnotexist--');
+                } else if (previouslySelectedTable != '') {
+                    $("#column_chooser_table_list").val(previouslySelectedTable);
+                } else {
+                    $("#column_chooser_table_list").val('--thisdoesnotexist--');
+                }
+            } else {
+                $("#column_chooser_preselected_table").val(preselectedTable);
+                $("#column_chooser_table_list")
+                    .val('StudentList_' + preselectedTable);
+            }
+        }
+        // Select the only option if only one option
+        if ($("#column_chooser_table_list option:not(.hidden)").length == 1) {
+            $("#column_chooser_table_list option:not(.hidden)").prop('selected', true);
+        }
+        // Update the table selector
+        $("#column_chooser_table_list")
+            .chosen({width: '100%', search_contains: true})
+            .trigger('change');
+        $("#summary_chooser_table_list")
+            .chosen({width: '100%', search_contains: true})
+            .trigger('change');
+    }
+    $(document).on('click', '.sres-condition-column-remove', function(){
+        $(this).siblings('.sres-condition-column-placeholder').text('Pick a column');
+        $(this).siblings('.sres-condition-column-receiver')
+            .attr('data-sres-tableuuid', '')
+            .val('');
+    });
+    function column_chooser_show_links(input, linkToList, linkToColumnSettings) {
+        let tableuuid = input.attr('data-sres-tableuuid');
+        input.siblings('.sres-condition-column-placeholder-links').remove();
+        if (tableuuid && linkToList) {
+            input.siblings('span.sres-condition-column-placeholder').after(
+                '&nbsp;<a href="' + '{{ url_for("table.view_table", table_uuid="__table_uuid__") }}'.replace("__table_uuid__", tableuuid) + '" target="_blank" title="Open corresponding list" class="sres-condition-column-placeholder-links"><span class="glyphicon glyphicon-list-alt" aria-hidden="true"></span></a>'
+            );
+        }
+        if (tableuuid && linkToColumnSettings) {
+            input.siblings('span.sres-condition-column-placeholder').after(
+                '&nbsp;<a href="' + '{{ url_for("table.edit_column", table_uuid="__table_uuid__", column_uuid="__column_uuid__") }}'.replace("__table_uuid__", tableuuid).replace("__column_uuid__", input.val()) + '" target="_blank" title="Open column settings" class="sres-condition-column-placeholder-links"><span class="glyphicon glyphicon-cog" aria-hidden="true"></span></a>'
+            );
+        }
+    }
+    /**
+        Column selector
+    **/
+    $(document).ready(function(){
+        $('select[name=column_chooser_column_list]').chosen({width: '100%', search_contains: true});
+        $('select[name=column_chooser_column_list_student_info]').chosen({width: '100%', search_contains: true});
+    });
+    $(document).on('change', '#column_chooser_column_list', function(){
+        let data = $(this).data('sres-column-meta');
+        /** Show magic formatter selection **/
+        let magicFormatters = data.magic_formatters;
+        let selectedColumnReference = $(this).val();
+        $('#column_chooser_column_magic_formatter_container').addClass('d-none');
+        $('#column_chooser_column_magic_formatter').html('');
+        let magicFormattersHtml = [];
+        for (let c = 0; c < data.columns.length; c++) {
+            let col = data.columns[c];
+            if (col.value == selectedColumnReference) {
+                let columnType = col.datatype;
+                for (let m = 0; m < magicFormatters.length; m++) {
+                    let magicFormatter = magicFormatters[m];
+                    let showThisMagicFormatter = false;
+                    magicFormatter.for.forEach(function(forColumnType){
+                        if (forColumnType == columnType) {
+                            if ((magicFormatter.name == 'display' || magicFormatter.name == 'description') && !col.selectable_options_length) {
+                                showThisMagicFormatter = false;
+                            } else {
+                                showThisMagicFormatter = true;
+                            }
+                        }
+                        if (forColumnType.indexOf('.') != -1) {
+                            if (forColumnType == columnType + '.' + col.type) {
+                                showThisMagicFormatter = true;
+                            }
+                        }
+                    });
+                    if (showThisMagicFormatter) {
+                        magicFormattersHtml.push('<option value="' + magicFormatter.name + '">' + magicFormatter.display + ' (' + magicFormatter.hint + ')</option>');
+                    }
+                }
+                break;
+            }
+        }
+        if (magicFormattersHtml.length) {
+            magicFormattersHtml.unshift('<option value="">None (default)</option>');
+            $('#column_chooser_column_magic_formatter').html(magicFormattersHtml.join(''));
+            {% if show_magic_formatters %}
+                $('#column_chooser_column_magic_formatter_container').removeClass('d-none');
+            {% endif %}
+        }
+    });
+    $(document).on('change', '#column_chooser_table_list', function() {
+        $('#column_chooser_table_list').trigger('chosen:updated');
+        if ($(this).val() == 'student_info') {
+            $('#column_chooser_column_list_container').addClass('d-none');
+            $('select[name=column_chooser_column_list]').html('').trigger('chosen:updated');
+            $('#column_chooser_column_list_container_student_info').removeClass('d-none');
+        } else if ($(this).val() == null) {
+            $('#column_chooser_column_list_container').addClass('d-none');
+            $('#column_chooser_column_list_container_student_info').addClass('d-none');
+        } else {
+            $('#column_chooser_column_list_container_student_info').addClass('d-none');
+            var tableuuid = $(this).val().toUpperCase();
+            var datatype = $("#column_chooser_datatype").val();
+            var disabledUUIDs = $('#column_chooser_disable_uuids').val().toUpperCase().split(',');
+            $('#column_chooser_column_list_loading').removeClass('d-none');
+            $('#column_chooser_column_list_container').addClass('d-none');
+            $('#column_chooser_column_magic_formatter_container').addClass('d-none');
+            $('select[name=column_chooser_column_list]').html('').addClass('d-none').trigger('chosen:updated');
+            let url = '{{ url_for("table.list_columns", table_uuid="__table_uuid__")|safe }}'.replace('__table_uuid__', tableuuid) + '?data_type=' + datatype;
+            {%- if base_only %}
+                url += '&base_only=1';
+            {% endif -%}
+            {%- if sda_only %}
+                url += '&sda_only=1';
+            {% endif -%}
+            console.log('url', url);
+            $.ajax({
+                url: url,
+                success: function(data) {
+                    var data = JSON.parse(data);
+                    //console.log('data', data);
+                    var optionsHTML = "";
+                    let disabled = "";
+                    for (var c = 0; c < data.columns.length; c++) {
+                        //console.log(c, data.columns[c]);
+                        if (data.columns[c]['type'] == 'label-only') { 
+                            disabled = ' disabled ';
+                        } else if (disabledUUIDs.indexOf(data.columns[c]['value'].toUpperCase()) > -1) {
+                            disabled = ' disabled ';
+                        } else {
+                            disabled = '';
+                        }
+                        optionsHTML += '<option value="' + data.columns[c]['value'] + '" ' +
+                            'data-sres-datatype="' + data.columns[c]['datatype'] + '" ' + 
+                            'data-sres-full-display="' + Handlebars.Utils.escapeExpression(data.columns[c]['full_display']) + '" ' + 
+                            disabled + '>' +
+                            Handlebars.Utils.escapeExpression(data.columns[c]['display']).substring(0, 200) +
+                            '</option>'
+                    }
+                    /*if (datatype.length == 0) {
+                        optionsHTML += '<option value="LABDAY">[System column] Session day</option>' +
+                            '<option value="LABTIME">[System column] Session time</option>' +
+                            '<option value="LABROOM">[System column] Session other information</option>';
+                    }*/
+                    $('select[name=column_chooser_column_list]')
+                        .append(optionsHTML)
+                        .data('sres-column-meta', data);
+                    $('#column_chooser_column_list_loading').addClass('d-none');
+                    $('select[name=column_chooser_column_list]').trigger('chosen:updated');
+                    if ($("#column_chooser_preselected_column").val() != '') {
+                        $('select[name=column_chooser_column_list]')
+                            .val($("#column_chooser_preselected_column").val())
+                            .trigger('chosen:updated');
+                    }
+                    $('#column_chooser_column_list').trigger('change');
+                    $('#column_chooser_column_list_container').removeClass('d-none');
+                }
+            });
+        }
+        $('#column_chooser_button_do').removeClass('d-none');
+    });
+    $(document).on('click', 'button.sres-translate-column-references', function(){
+        var editorId = $(this).siblings('.sres-tinymce-editor').attr('id');
+        if ($(this).attr('data-sres-current-mode') == 'design') {
+            if (translateColumnReferencesFriendly(editorId, $(this).attr('data-sres-uuid'))) {
+                $(this).attr('data-sres-current-mode', 'friendly');
+                $(this).html('Back to design mode');
+                $(this).siblings('button.sres-editor-insert-data-field').prop('disabled', true).addClass('disabled');
+                $(this).siblings('.sres-disable-upon-translate-column-references').prop('disabled', true).addClass('disabled');
+            }
+        } else {
+            untranslateColumnReferencesFriendly(editorId, $(this).attr('data-sres-uuid'));
+            $(this).attr('data-sres-current-mode', 'design');
+            $(this).html('Show friendly column names');
+            $(this).siblings('button.sres-editor-insert-data-field').prop('disabled', false).removeClass('disabled');
+            $(this).siblings('.sres-disable-upon-translate-column-references').prop('disabled', false).removeClass('disabled');
+        }
+    });
+    function translateColumnReferencesFriendly(editorId, uuid){
+        var editor = tinymce.editors[editorId];
+        var html = editor.getContent();
+        // find the column references
+        var columnReferences = html.match(/(?:\$*)(COL_)[A-Z0-9a-z_\.]+(?:\$*)/g);
+        if (!columnReferences) {
+            return false;
+        }
+        // disable the editor and save its current state
+        editor.setMode('readonly');
+        // produce a clone of the editor to represent the friendly names
+        var clone = $("#" + editorId).clone().attr('id', editorId + '_friendly');
+        $("#" + editorId).after(clone);
+        $("#" + editorId).addClass('d-none');
+        // iterate through column references and translate to friendly
+        var columnReferencesToSend = []
+        for (var c = 0; c < columnReferences.length; c++) {
+            var columnReference = columnReferences[c].replace(/\$/g, '');
+            columnReferencesToSend.push(columnReference);
+        }
+        let urlParams = new URLSearchParams(window.location.search);
+        $.ajax({
+            url: '{{ url_for("column.get_column_details") }}?column_references=' + columnReferencesToSend.join(',') + '{% if request.blueprint == "collective" %}&collective_asset_uuid={{ request.view_args.asset_uuid }}{% endif %}' + (urlParams.has('from_collective_asset_uuid') ? '&from_collective_asset_uuid=' + urlParams.get('from_collective_asset_uuid') : ''),
+            method: 'GET',
+            success: function(data) {
+                data = JSON.parse(data);
+                Object.keys(data).forEach(function(key){
+                    let record = data[key];
+                    let friendlyName = '';
+                    if (record.friendly_display && record.columnuuid) {
+                        friendlyName = '<span class="sres-column-reference-friendly">' + he.escape(record.friendly_display) + 
+                            '&nbsp;<a href="' + '{{ url_for("table.view_table", table_uuid="__table_uuid__") }}'.replace("__table_uuid__", record.tableuuid) + '" target="_blank" title="Open corresponding list"><span class="fa fa-table" aria-hidden="true"></span></a>' +
+                            '&nbsp;<a href="' + '{{ url_for("table.edit_column", table_uuid="__table_uuid__", column_uuid="column_uuid") }}'.replace("column_uuid", record.columnuuid).replace("__table_uuid__", record.tableuuid) + '" target="_blank" title="Open column settings"><span class="fa fa-cog" aria-hidden="true"></span></a>' +
+                            '</span>';
+                    } else {
+                        friendlyName = '<span class="sres-column-reference-friendly-error">Error - could not find column</span>';
+                    }
+                    clone.html(clone.html().replace(new RegExp('\\$' + record.escaped_original_column_reference + '\\$', 'g'), friendlyName));
+                });
+            }
+        })
+        return true;
+    }
+    function untranslateColumnReferencesFriendly(editorId, uuid){
+        tinymce.editors[editorId].setMode('design');
+        $("#" + editorId).removeClass('d-none');
+        $("#" + editorId + "_friendly").remove();
+    }
+    /**
+        Summaries
+    **/
+    $(document).on('change', '#summary_chooser_table_list', function(){
+        $('#summary_chooser_table_list').trigger('chosen:updated');
+        let tableUuid = $(this).val().toUpperCase();
+        $('#summary_chooser_summary_list_loading').removeClass('d-none');
+        $('#summary_chooser_summary_list_container').addClass('d-none');
+        $('select[name=summary_chooser_summary_list]').html('').addClass('d-none').trigger('chosen:updated');
+        $.ajax({
+            url: "{{ url_for('summary.list_summaries', table_uuid='__table_uuid__')|safe }}".replace('__table_uuid__', tableUuid),
+            success: function(data) {
+                data = JSON.parse(data);
+                data.summaries.forEach(function(summary){
+                    let optionHtml = '';
+                    optionHtml += '<option value="' + summary.canonical_reference + '">';
+                    optionHtml += summary.name;
+                    optionHtml += '</option>';
+                    $('select[name=summary_chooser_summary_list]').append(optionHtml);
+                });
+                $('#summary_chooser_summary_list_loading').addClass('d-none');
+                $('select[name=summary_chooser_summary_list]')
+                    .removeClass('d-none')
+                    .chosen({width: '100%', search_contains: true})
+                    .trigger('change')
+                    .trigger('chosen:updated');
+                $('#summary_chooser_summary_list_container').removeClass('d-none');
+                $('#summary_chooser_button_do').removeClass('d-none');
+            }
+        });
+    });
+    $(document).on('click', '#summary_chooser_button_do', function(){
+        $('#column_chooser').modal('hide');
+        let destination_id = $('#column_chooser_destination_id').val();
+        let text_to_insert = $('#summary_chooser_summary_list').val();
+        if (typeof tinymce != 'undefined' && typeof tinymce.editors[destination_id] != 'undefined') {
+            tinymce.editors[destination_id].insertContent(text_to_insert);
+        } else {
+            $('#' + destination_id).insertAtCaret(text_to_insert).trigger('change');
+        }
+    });
+</script>
+
+<!--
+   Suggestions for querybuilder value input
+-->
+{% raw %}
+    <script id="search_result_line_template" type="text/x-handlebars-template">
+        <span>{{suggestion}}</span>
+    </script>
+{% endraw %}
+<script>
+    $(document).on('focus', ".rule-value-container input:text", function(){
+        if (!ENV.hasOwnProperty('ENUMERATE_OPERAND_SUGGESTIONS_ENDPOINT')) {
+            return;
+        }
+        let $ruleValueContainer = $(this);
+        //console.log($ruleValueContainer.parents('.algolia-autocomplete').length);
+        if ($ruleValueContainer.parents('.algolia-autocomplete').length != 0) {
+            // already initialised
+            //console.log('already');
+            return;
+        }
+        $ruleValueContainer.autocomplete(
+            {
+                minLength: 0,
+                autoWidth: false,
+                autoselect: false,
+                debug: false
+            }, 
+            {
+                name: 'search-results',
+                source: function(query, callback){
+                    $.ajaxq.abort('get-operand-suggestion');
+                    var columnReference = $ruleValueContainer.parents('.rule-container').find('.rule-filter-container select').val();
+                    //console.log('query', $ruleValueContainer, query, columnReference);
+                    $.ajaxq('get-operand-suggestion', {
+                        url: ENV['ENUMERATE_OPERAND_SUGGESTIONS_ENDPOINT'],
+                        data: { column_reference: columnReference, term: query },
+                        type: 'GET',
+                        dataType: 'json',
+                        success: function(data){
+                            //console.log(data);
+                            callback(data['search_results'].map(function(x){
+                                return x;
+                            }));
+                        }
+                    });
+                },
+                templates: {
+                    suggestion: function(suggestion, answer){
+                        //console.log(suggestion, answer);
+                        let template = Handlebars.compile(document.getElementById("search_result_line_template").innerHTML);
+                        return template({
+                            suggestion: suggestion
+                        })
+                    },
+                    empty: function(){
+                        return '<span class="small">No matching suggestions found</span>';
+                    },
+                    header: function() {
+                        return '<span class="small">Some suggestions... </span>';
+                    }
+                }
+            }
+        ).on('autocomplete:selected', function(event, suggestion, dataset, context) {
+            //console.log(event, suggestion, dataset, context);
+            setTimeout(function(){
+                $(event.target).val(suggestion).trigger('change');
+                $(event.target).autocomplete('val', suggestion);
+            }, 50);
+        });
+        $ruleValueContainer.focus();
+    });
+</script>
+
+<!-- multi-column magic formatter -->
+<div id="multi_column_magic_formatter" class="modal fade" role="dialog" style="z-index:5000;">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4>Insert multi-column magic formatter</h4>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <label>Multi-column magic formatters allow you to easily combine data from multiple columns and format it in some sort of list. These special magic formatters can also traverse through time to pull out historical data.</label>
+                <label>Configure the magic formatter below and then insert.</label>
+                <div class="form-group">
+                    <label for="multi_column_magic_formatter_type" class="sres-form-label">How multiple data elements will be formatted</label>
+                    <select id="multi_column_magic_formatter_type" class="form-control">
+                        {% for mf in magic_formatters_list if mf.enabled_for_global_magic %}
+                            <option value="{{ mf.name }}">
+                                {{ mf.display }} ({{ mf.hint }})
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="multi_column_magic_formatter_history_mode" class="sres-form-label">Which records to display</label>
+                    <select id="multi_column_magic_formatter_history_mode" class="form-control">
+                        <optgroup label="Display records received by a person (default)">
+                            <option value="">Most recent record (default)</option>
+                            <option value="earliest">Earliest record</option>
+                            <option value="user_latest">Most recent record for each person</option>
+                            <option value="user_earliest">Earliest record for each person</option>
+                            <option value="all">All records</option>
+                        </optgroup>
+                        <optgroup label="Display records given by a person">
+                            <option value="given_latest">Most recent record (default)</option>
+                            <option value="given_earliest">Earliest record</option>
+                            <option value="given_user_latest">Most recent record for each receiving person</option>
+                            <option value="given_user_earliest">Earliest record for for each receiving person</option>
+                            <option value="given_all">All records</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="multi_column_magic_formatter_auth_user_mode" class="sres-form-label">
+                        Show information about the person
+                        <span id="multi_column_magic_formatter_auth_user_mode_given">who saved data</span>
+                        <span id="multi_column_magic_formatter_auth_user_mode_received" class="d-none">who received data</span>
+                    </label>
+                    <select id="multi_column_magic_formatter_auth_user_mode" class="form-control">
+                        <option value="">No user information (default)</option>
+                        <option value="username">Show username</option>
+                        <option value="full_name">Show full name</option>
+                        <option value="given_names">Show given names</option>
+                        <option value="surname">Show surname</option>
+                        <option value="email">Show email</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button>
+                <input type="button" value="Insert" id="multi_column_magic_formatter_insert" class="btn btn-primary" />
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    $(document).on('click', '.sres-multi-column-magic-formatter-insert', function(){
+        let targetId = $(this).attr('data-sres-insert-target');
+        if (typeof targetId == 'undefined') {
+            targetId = $(this).siblings('.sres-tinymce-editor').attr('id');
+        }
+        $('#multi_column_magic_formatter_insert').data('sres-insert-target', targetId);
+        $('#multi_column_magic_formatter').modal('show');
+    });
+    $(document).on('change', '#multi_column_magic_formatter_history_mode', function(){
+        if ($(this).val().startsWith('given_')) {
+            $('#multi_column_magic_formatter_auth_user_mode_given').addClass('d-none');
+            $('#multi_column_magic_formatter_auth_user_mode_received').removeClass('d-none');
+        } else {
+            $('#multi_column_magic_formatter_auth_user_mode_given').removeClass('d-none');
+            $('#multi_column_magic_formatter_auth_user_mode_received').addClass('d-none');
+        }
+    });
+    $(document).on('click', '#multi_column_magic_formatter_insert', function(){
+        // gather
+        let targetId = $(this).data('sres-insert-target');
+        let type = $('#multi_column_magic_formatter_type').val();
+        // history mode
+        let historyMode = $('#multi_column_magic_formatter_history_mode').val();
+        if (historyMode.length) {
+            historyMode = ' ' + 'history:' + historyMode;
+        }
+        // auth_user mode
+        let authUserMode = $('#multi_column_magic_formatter_auth_user_mode').val();
+        if (authUserMode.length) {
+            authUserMode = ' ' + 'auth_user:' + authUserMode;
+        }
+        // compose
+        let textToInsert = '${' + type + historyMode + authUserMode + '}';
+        textToInsert += ' Replace this with inserted column references ';
+        textToInsert += '{' + type + '}$';
+        // insert
+        if (typeof tinymce != 'undefined' && typeof tinymce.editors[targetId] != 'undefined') {
+            tinymce.editors[targetId].insertContent(textToInsert);
+        }
+        $('#multi_column_magic_formatter').modal('hide');
+    });
+</script>
+
+{% endmacro %}

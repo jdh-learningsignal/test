@@ -1,0 +1,831 @@
+{% extends 'base-staff.html' %}
+
+{% set table_uuid = table.config.uuid %}
+
+{% block title %}
+    {{ vars.page_title }}
+{% endblock %}
+
+{% block head_css2 %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dataTables.bootstrap4.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fixedHeader.dataTables.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fixedHeader.bootstrap4.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/fixedColumns.bootstrap4.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/buttons.bootstrap4.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-editable.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sres.table-view.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sres.algolia-autocomplete.css') }}">
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/ajaxq.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jquery.dataTables.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dataTables.bootstrap4.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dataTables.fixedHeader.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dataTables.fixedColumns.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dataTables.buttons.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/buttons.bootstrap4.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/buttons.html5.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jszip.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/bootstrap-editable.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jquery-sortable.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/autocomplete.jquery.min.js') }}"></script>
+    {% raw %}
+        <script id="column_jumper_result_line_template" type="text/x-handlebars-template">
+            <span data-sres-columnuuid="{{columnuuid}}" data-sres-scroll-left="{{left}}">
+                {{name}}
+                <span class="text-muted font-italic">{{description}}</span>
+            </span>
+        </script>
+    {% endraw %}
+    {% raw %}
+        <script id="change_history_table_template" type="text/x-handlebars-template">
+            <div>
+                <table data-sres-changehistory-columnuuid="{{columnUuid}}" data-sres-changehistory-identifier="{{identifier}}" class="table sres-change-history-container" style="font-size:small;">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Value changed to</th>
+                            <th>By user</th>
+                            {{#if showMultipleReports}}
+                                <th>Report number</th>
+                            {{/if}}
+                            <th>&nbsp;</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </script>
+        <script id="change_history_row_template" type="text/x-handlebars-template">
+            <tr>
+                <td>{{timestamp}}</td>
+                <td><div class="sres-change-history-data-display">{{value}}</div></td>
+                <td>
+                    {{authUser}}
+                    {{#if realAuthUser}}
+                        <span class="fa fa-mask" title="Actual user: {{realAuthUser}}"></span>
+                    {{/if}}
+                </td>
+                {{#if showMultipleReports}}
+                    <td>{{reportNumber}}</td>
+                {{/if}}
+                <td>
+                    <a href="javascript:void(0);"><span class="fa fa-redo sres-changehistory-revert" aria-hidden="true" title="Revert to this value" data-sres-changehistory-id="{{id}}"></span></a>
+                    <a href="javascript:void(0);"><span class="fa fa-user-clock sres-changehistory-revert-on-behalf" aria-hidden="true" title="Revert to this value on behalf of the original user" data-sres-changehistory-id="{{id}}" data-sres-changehistory-authuser="{{authUser}}"></span></a>
+                </td>
+            </tr>
+        </script>
+        <script id="merge_records_row_template" type="text/x-handlebars-template">
+            <div class="row" data-sres-merge-record-column-type="{{column_type}}" data-sres-merge-record-column-uuid="{{column_uuid}}">
+                <div class="col-sm-12 sres-form-label">
+                    {{column_header}}
+                </div>
+                <div class="col-sm-6" data-sres-merge-record-oid="{{oid_a}}" data-sres-merge-record-col="a">
+                    <label>
+                        <input type="radio" name="sres_merge_record_column_{{column_uuid}}" value="a" checked class="sres-merge-record-selector" data-sres-merge-record-column-uuid="{{column_uuid}}">
+                        <div class="sres-merge-record-content">{{content_a}}</div>
+                    </label>
+                </div>
+                <div class="col-sm-6" data-sres-merge-record-oid="{{oid_b}}" data-sres-merge-record-col="b">
+                    <label>
+                        <input type="radio" name="sres_merge_record_column_{{column_uuid}}" value="b" class="sres-merge-record-selector" data-sres-merge-record-column-uuid="{{column_uuid}}">
+                        <div class="sres-merge-record-content">{{content_b}}</div>
+                    </label>
+                </div>
+            </div>
+        </script>
+    {% endraw %}
+    <script>
+        ENV['SRES_LOAD_DATA_URL'] = "{{ url_for('table.load_data', table_uuid=table.config.uuid, view_uuid=view.config.uuid)|safe }}";
+        ENV['GET_FILTERED_IDENTIFIERS_ENDPOINT'] = "{{ url_for('table.load_data', table_uuid=table.config.uuid, view_uuid=view.config.uuid, identifiers_only=1)|safe }}";
+        ENV['SRES_IS_LIST_ADMINISTRATOR'] = {% if vars.is_admin %}true{% else %}false{% endif %};
+        ENV['AGGREGATOR_RECALCULATION_ENDPOINT'] = "{{ url_for('table.recalculate_aggregator', table_uuid=table.config.uuid, column_uuid='__column_uuid__')|safe }}";
+        ENV['SET_DATA_ENDPOINT'] = "{{ url_for('table.set_data', table_uuid=table.config.uuid, column_uuid='__column_uuid__')|safe }}";
+        ENV['GET_ALL_IDENTIFIERS_ENDPOINT'] = "{{ url_for('table.get_all_identifiers', table_uuid=table.config.uuid, _external=True)|safe }}";
+        ENV['GET_STUDENT_DATA_ENDPOINT'] = "{{ url_for('table.get_student_data', table_uuid=table.config.uuid, oid='__oid__')|safe }}";
+        ENV['MERGE_STUDENT_RECORDS_ENDPOINT'] = "{{ url_for('table.merge_student_records', table_uuid=table.config.uuid, oid_a='__oid_a__', oid_b='__oid_b__')|safe }}";
+        ENV['SAVE_VIEW_ENDPOINT'] = "{{ url_for('table.save_view', table_uuid=table.config.uuid, view_uuid=view.config.uuid or '__view_uuid__')|safe }}";
+        ENV['DELETE_VIEW_ENDPOINT'] = "{{ url_for('table.delete_view', table_uuid=table.config.uuid, view_uuid=view.config.uuid or '__view_uuid__')|safe }}";
+        ENV['VIEW_TABLE_URL'] = "{{ url_for('table.view_table', table_uuid=table.config.uuid)|safe }}";
+        ENV['EXPORT_CLASS_LIST_ENDPOINT'] = "{{ url_for('table.export_data', table_uuid=table.config.uuid, classlist='')|safe }}";
+        ENV['EXPORT_DATA_ENDPOINT'] = "{{ url_for('table.export_data', table_uuid=table.config.uuid)|safe }}";
+        ENV['GET_ID_ENDPOINT']  = "{{ url_for('table.get_my_id', table_uuid=table.config.uuid, identifier='__identifier__')|safe }}";
+        ENV['GET_CHANGE_HISTORY_ENDPOINT'] = "{{ url_for('table.get_change_history', table_uuid=table.config.uuid, column_uuid='__column_uuid__', identifier='__identifier__')|safe }}";
+        ENV['REVERT_CHANGE_HISTORY_ENDPOINT'] = "{{ url_for('table.revert_change_history', table_uuid=table.config.uuid)|safe }}";
+        ENV['VIEW_SINGLE_STUDENT_ENDPOINT'] = "{{ url_for('entry.view_single_student', table_uuid=table.config.uuid, mode='__mode__', identifier='__identifier__')|safe }}";
+        ENV['MAKE_DOC_ENDPOINT'] = "{{ url_for('table.make_doc', table_uuid=table.config.uuid) }}";
+        ENV['DATA_ENTRY_SINGLE_ENDPOINT'] = "{{ url_for('entry.add_value', table_uuid=table.config.uuid, column_uuid='__column_uuid__', identifier='__identifier__')|safe }}";
+        ENV['GET_COLUMNS_LIST_ENDPOINT'] = "{{ url_for('table.list_columns', table_uuid=table.config.uuid)|safe }}";
+        ENV['GET_COLUMN_CHANGE_HISTORY_UNIQUE_USERS'] = "{{ url_for('table.get_unique_auth_users', table_uuid=table.config.uuid, column_uuid='__column_uuid__')|safe }}";
+        ENV['APPLY_TO_OTHERS_RETROSPECTIVE'] = "{{ url_for('table.apply_to_others_retrospective', table_uuid=table.config.uuid, column_uuid='__column_uuid__')|safe }}";
+        ENV['API_COLUMN_DELETE'] = "{{ url_for('api_columns.rud_column', table_uuid=table.config.uuid, column_uuid='__column_uuid__')|safe }}";
+    </script>
+    <script src="{{ url_for('static', filename='js/sres.column-aggregator-recalculate.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.table-view.js', rand=range(1000,9999)|random|string) }}"></script>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <script>
+                {% for category, message in messages %}
+                    $.notify({
+                        message: {{ message|tojson }}
+                    }, {
+                        type: {{ category|tojson }}
+                    });
+                {% endfor %}
+            </script>
+        {% endif %}
+    {% endwith %}
+    
+{% endblock %}
+
+{% block body %}
+    
+    <main>
+    
+    <div class="row">
+        <div class="col">
+            <h1>
+                {{ table.get_full_name() }}
+                {% if table.config.workflow_state == "archived" %}<span class="badge badge-secondary">Archived</span>{% endif %}
+                {% if table.config.workflow_state == "deleted" %}<span class="badge badge-warning">Deleted</span>{% endif %}
+                <span class="float-right"><a href="#row_info_actions" data-toggle="collapse" id="collapse_row_info_actions" title="Show/hide action buttons"><span class="fa fa-chevron-up"></span></a></span>
+            </h1>
+        </div>
+    </div>
+    
+	<div class="row collapse show" id="row_info_actions">
+		<div class="col-sm-6">
+			<span class="badge {% if vars.view_unsaved %}badge-warning{% else %}badge-secondary{% endif %} sres-view-info" title="{{ view.config.description }}" data-sres-view-name="{{ view.config.name }}" data-sres-view-description="{{ view.config.description }}" data-sres-view-uuid="{{ view.config.uuid }}" data-sres-view-role="{{ view.config.role }}">
+				View: {% if vars.view_unsaved %}(Unsaved, currently editing){% else %}{{ view.config.name }}{% endif %}
+				{% if vars.view_unsaved %}
+					<a href="#" onclick="saveCurrentView();" title="Save custom view" class="sres-view-unsaved"><span class="glyphicon glyphicon-floppy-disk" aria-hidden="true"></span></a>
+				{% endif %}
+			</span>&nbsp;
+            {% set count_inactive_students = table.count_inactive_students() %}
+            {% if count_inactive_students %}
+                <span class="badge badge-secondary"><input type="checkbox" id="show_inactive" {% if request.args.get("showInactive", 0) == '1' %}checked{% endif %}>
+                    <label style="margin-bottom: 0px !important;" for="show_inactive">Show {{ count_inactive_students }} inactive students</label>
+                </span>&nbsp;
+                <span class="badge badge-secondary"><input type="checkbox" id="show_inactive_only" {% if request.args.get("showInactive", '') == 'only' %}checked{% endif %}>
+                    <label style="margin-bottom: 0px !important;" for="show_inactive_only">Only show inactive students</label>
+                </span>&nbsp;
+            {% endif %}
+			<span class="badge badge-secondary">
+				<cfoutput>Showing {{ vars.visible_columns.user|length }} of {{ vars.all_columns_info|length }} columns
+				{% if vars.is_admin %}
+					<a href="#" onclick="editColumnsShowing();" title="Customise column order and visibility" class="text-light"><span class="fa fa-cog" aria-hidden="true"></span></a>
+				{% endif %}
+			</span>&nbsp;
+			{% if vars.enrolment_update_status.success %}
+				<span class="badge badge-secondary">
+					Enrolments last updated {{ vars.enrolment_update_status.timestamp }} from {{ vars.enrolment_update_status.update_source }}
+				</span>&nbsp;
+			{% endif %}
+			<br />&nbsp;
+		</div>
+        <div class="col-sm-6" style="text-align: right;">
+            <div class="form-inline float-right">
+                <div class="dropdown mb-1">
+                    <button type="button" class="btn btn-outline-primary dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <span class="fa fa-table" aria-hidden="true"></span> List <span class="caret"></span>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-right">
+                        {% if vars.is_admin %}
+                            <a href="{{ url_for('table.edit_table', table_uuid=table.config.uuid) }}" class="dropdown-item"><span class="fa fa-cog" aria-hidden="true"></span> Edit list settings</a>
+                            <div class="dropdown-divider"></div>
+                        {% endif %}
+                        <a href="#" class="dropdown-item sres-list-refresh"><span class="fa fa-redo" aria-hidden="true"></span> Reload data</a>
+                        <a href="#" class="dropdown-item sres-list-highlights-clear"><span class="fa fa-eraser" aria-hidden="true"></span> Clear all highlights</a>
+                        <a href="#" class="dropdown-item sres-list-clear-all-searches"><span class="fa fa-search-minus" aria-hidden="true"></span> Clear all searches</a>
+                        <a href="#" class="dropdown-item sres-list-toggle-cell-truncation"><span class="fa fa-ellipsis-h" aria-hidden="true"></span> Toggle cell text truncation</a>
+                        {% if vars.is_admin %}
+                            <div  class="dropdown-divider"></div>
+                            <a href="{{ url_for('table.clone_table', table_uuid=table.config.uuid) }}" class="dropdown-item sres-list-clone"><span class="fa fa-clone"></span> Clone list</a>
+                            <div class="dropdown-divider"></div>
+                            <a href="{{ url_for('table.view_related_assets', table_uuid=table.config.uuid) }}" class="dropdown-item"><span class='fa fa-boxes'></span> View related filters and portals</a>
+                            <div class="dropdown-divider"></div>
+                            <a href="{{ url_for('summary.view_summaries', table_uuid=table.config.uuid) }}" class="dropdown-item"><span class='fa fa-layer-group'></span> View and edit summaries</a>
+                            <div class="dropdown-divider"></div>
+                            <h6 class="dropdown-header">Custom views</h6>
+                            <a href="#" onclick="editColumnsShowing();" class="dropdown-item sres-views-choose-columns"><span class="fa fa-edit"></span> Choose column ordering, visibility &amp; freezing</a>
+                            <a href="#" onclick="saveCurrentView();" class="dropdown-item"><span class="fa fa-save"></span> Save current view</a>
+                            <a href="#" onclick="deleteCurrentView();" class="dropdown-item"><span class="fa fa-trash"></span> Delete current view</a>
+                        {% endif %}
+                        <div class="dropdown-divider"></div>
+                        <h6 class="dropdown-header">Available custom views</h6>
+                        {% if vars.is_admin %}
+                            <a href="{{ url_for('table.view_table', table_uuid=table.config.uuid, view='') }}" class="dropdown-item">
+                                {% if not view.config.uuid %}<span class="fa fa-arrow-right" title="Currently active"></span>{% endif %}
+                                All columns
+                            </a>
+                        {% endif %}
+                        {% for one_view in table.enumerate_views() %}
+                            <a href="{{ url_for('table.view_table', table_uuid=table.config.uuid, view=one_view.view_uuid) }}{% if request.args.get('showInactive', 0) == '1' %}&showInactive=1{% endif %}" title="{{ one_view.description }}" class="dropdown-item">
+                                {% if one_view.view_uuid == view.config.uuid %}<span class="fa fa-arrow-right" title="Currently active"></span>{% endif %}
+                                {{ one_view.name }} ({{ one_view.column_count }} columns)
+                                {% if one_view.role == 'default' %}<span class="badge badge-info">Default</span>{% endif %}
+                            </a>
+                        {% endfor %}
+                    </div>
+                </div>&nbsp;
+                {% if vars.is_admin %}
+                    <div class="dropdown mb-1" id="settings_manipulate_analyse">
+                        <button type="button" class="btn btn-outline-primary dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            <span class="fa fa-cogs" aria-hidden="true"></span> Manipulate and analyse <span class="caret"></span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right">
+                            <h6 class="dropdown-header">Import data</h6>
+                            <a href="{{ url_for('table.import_data', table_uuid=table.config.uuid) }}" class="dropdown-item"><span class="fa fa-file-import"></span> Import from files or other sources</a>
+                            {% if "canvas" in vars.lms_available %}
+                                <a href="{{ url_for('table.connect_lms', table_uuid=table.config.uuid, lms='canvas') }}" class="dropdown-item"><span class="fa fa-plug"></span> Connect Canvas</a>
+                            {% endif %}
+                            {% if "zoom" in vars.lms_available %}
+                                <a href="{{ url_for('table.connect_lms', table_uuid=table.config.uuid, lms='zoom') }}" class="dropdown-item"><span class="fa fa-plug"></span> Connect Zoom</a>
+                            {% endif %}
+                            <div class="dropdown-divider"></div>
+                            <h6 class="dropdown-header">Export data from all columns</h6>
+                            <a href="{{ url_for('table.export_data', table_uuid=table.config.uuid, inactive='') }}" class="dropdown-item"><span class="fa fa-file-export"></span> Export all</a></li>
+                            <a href="#" class="dropdown-item sres-export-filtered"><span class="fa fa-file-export"></span> Export only filtered students</a></li>
+                            <a href="{{ url_for('table.export_data', table_uuid=table.config.uuid) }}" class="dropdown-item"><span class="fa fa-file-export"></span> Export only active (enrolled) students</a></li>
+                            <a href="{{ url_for('table.export_data', table_uuid=table.config.uuid, deidentify='') }}" class="dropdown-item"><span class="fa fa-mask"></span> Export only active students (deidentified)</a></li>
+                            {% if view.config.uuid %}
+                                <div class="dropdown-divider"></div>
+                                <h6 class="dropdown-header">Export data from custom view</h6>
+                                <a href="{{ url_for('table.export_data', table_uuid=table.config.uuid, inactive='', view_uuid=view.config.uuid) }}" class="dropdown-item"><span class="fa fa-file-export"></span> Export all</a></li>
+                                <a href="#" class="dropdown-item sres-export-filtered" data-sres-view-uuid="{{ view.config.uuid }}"><span class="fa fa-file-export"></span> Export only filtered students</a></li>
+                                <a href="{{ url_for('table.export_data', table_uuid=table.config.uuid, view_uuid=view.config.uuid) }}" class="dropdown-item"><span class="fa fa-file-export"></span> Export only active (enrolled) students</a></li>
+                            {% endif %}
+                            <div class="dropdown-divider"></div>
+                            {# TODO
+                            <a href="url_for('vis.new_vis', table_uuid=table.config.uuid)" class="dropdown-item"><span class="fa fa-chart-line"></span> Visualise data</a>
+                            #}
+                            <a href="#" class="sres-download-class-list dropdown-item"><span class="fa fa-file-export"></span> Download filtered class list</a>
+                            <a href="#" class="sres-make-labels dropdown-item"><span class="fa fa-th-large"></span> Make printouts</a>
+                            <a href="{{ url_for('table.visualise_tags', table_uuid=table.config.uuid) }}" class="dropdown-item"><span class="fas fa-tags"></span> Visualise tags</a>
+                            <div class="dropdown-divider"></div>
+                            <h6 class="dropdown-header">QR codes</h6>
+                            <a href="{{ url_for('table.get_my_id', table_uuid=table.config.uuid) }}" class="dropdown-item"><span class="fa fa-link"></span> Get link for personalised QR code download</a>
+                            <div class="dropdown-divider"></div>
+                            <h6 class="dropdown-header">Auditing functions</h6>
+                            <a href="{{ url_for('table.download_change_history', table_uuid=table.config.uuid) }}" class="dropdown-item">Export all change history (takes a while)</a>
+                            {# TODO
+                            <a href="{{ url_for('table.visualise_change_history', table_uuid=table.config.uuid) }}" class="dropdown-item">Visualise audit history (takes a while)</a>
+                            #}
+                        </div>
+                    </div>&nbsp;
+                    <div class="dropdown mb-1" id="settings_columns">
+                        <button type="button" class="btn btn-outline-primary dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            <span class="fa fa-columns" aria-hidden="true"></span> Columns <span class="caret"></span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right">
+                            <a href="{{ url_for('table.new_column', table_uuid=table.config.uuid, column_type='standard') }}" class="dropdown-item"><span class="fa fa-plus"></span> Add standard column</a>
+                            <div class="dropdown-divider"></div>
+                            <a href="{{ url_for('table.new_column', table_uuid=table.config.uuid, column_type='aggregator') }}" class="dropdown-item"><span class="fa fa-cubes"></span> Add aggregator column</a>
+                            <a href="{{ url_for('table.new_column', table_uuid=table.config.uuid, column_type='aggregator', mode='crosslist') }}" class="dropdown-item"><span class="fa fa-random"></span> Add cross-list aggregator</a>
+                            <div class="dropdown-divider"></div>
+                            <a href="{{ url_for('table.new_column', table_uuid=table.config.uuid, column_type='tag_aggregator') }}" class="dropdown-item"><span class="fa fa-tags"></span> Create one-time tag aggregation column</a>
+                            <div class="dropdown-divider"></div>
+                            <a href="{{ url_for('table.column_summary', table_uuid=table.config.uuid) }}" class="dropdown-item"><span class="fa fa-columns"></span> Column summary</a>
+                            <div class="dropdown-divider"></div>
+                            <h6 class="dropdown-header">Bulk actions on selected columns</h6>
+                            <a href="#" class="dropdown-item sres-selected-column-settings-select-toggle" data-sres-select-action="enable"><span class="fa fa-check-double"></span> Enable bulk actions</a>
+                            <a href="#" class="dropdown-item sres-selected-column-settings-select-toggle" data-sres-select-action="all"><span class="fa fa-check-square"></span> Select all columns</a>
+                            <a href="#" class="dropdown-item sres-selected-column-settings-select-toggle" data-sres-select-action="none"><span class="fa fa-square"></span> Select none</a>
+                            <a href="#" class="dropdown-item sres-selected-column-settings d-none" data-sres-select-action="delete"><span class="fa fa-trash"></span> Delete column(s)</a>
+                            <a href="#" class="dropdown-item sres-selected-column-settings d-none sres-export-filtered" data-sres-columnuuid="__selected__" data-sres-select-action="export_data"><span class="fa fa-file-export"></span> Export only filtered students and selected columns</a></li>
+                            {% if view.config.uuid %}
+                                <a href="#" class="dropdown-item sres-selected-column-settings d-none sres-export-filtered" data-sres-view-uuid="{{ view.config.uuid }}" data-sres-columnuuid="__selected__" data-sres-select-action="export_data"><span class="fa fa-file-export"></span> Export only filtered students and selected columns from current view</a></li>
+                            {% endif %}
+                        </div>
+                    </div>&nbsp;
+                    <div class="dropdown mb-1" id="settings_students">
+                        <button type="button" class="btn btn-outline-primary dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            <span class="fa fa-user" aria-hidden="true"></span> Students <span class="caret"></span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right">
+                            <a href="#" class="sres-add-student-manually dropdown-item"><span class="fa fa-user-plus"></span> Add student manually</a>
+                            <a href="#" class="sres-show-single-person-info dropdown-item"><span class="fa fa-search"></span> View information for one student</a>
+                            <div class="dropdown-divider"></div>
+                            <a href="#" class="sres-merge-records dropdown-item"><span class="fa fa-user-cog"></span> Merge records (rows)</a>
+                        </div>
+                    </div>&nbsp;
+                    <div class="dropdown mb-1" id="settings_filters">
+                        <button type="button" class="btn btn-outline-primary dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                            <span class="fa fa-star" aria-hidden="true"></span> Filters and portals <span class="caret"></span>
+                        </button>
+                        <div class="dropdown-menu dropdown-menu-right">
+                            <a href="{{ url_for('filter.new_filter', source_table_uuid=table.config.uuid) }}" class="dropdown-item"><span class="fa fa-filter"></span> Create new filter</a>
+                            {# TODO
+                            <a href="#" data-sres-href="{{ url_for('filter.new_filter') }}" class="sres-filter-from-searches dropdown-item"><span class="fa fa-filter"></span> Create filter from existing column searches</a>
+                            #}
+                            <div class="dropdown-divider"></div>
+                            <a href="{{ url_for('portal.new_portal', source_table_uuid=table.config.uuid) }}" class="dropdown-item"><span class="fa fa-window-maximize"></span> Create new portal</a>
+                            <div class="dropdown-divider"></div>
+                            <a href="{{ url_for('table.view_related_assets', table_uuid=table.config.uuid) }}" class="dropdown-item"><span class='fa fa-boxes'></span> View related filters and portals</a>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+	</div>
+    
+	<div class="row">
+		<div class="col">
+			<table class="table table-striped table-bordered table-hover table-condensed sres-main-table" id="main_table" data-sres-tableuuid="{{ table.config.uuid }}" data-sres-frozencolumns="{{ view.config.extra_data.frozencolumns }}" data-sres-pagelength="{{ view.config.extra_data.pagelength }}">
+				{% set ns = namespace(column_counter=0) %}
+                <thead>
+					<tr>
+						<th class="header_actions" data-defaultcontent="" data-name="_actions"></th>
+						{% for system_column in vars.visible_columns.system %}
+							{% set ns.column_counter = ns.column_counter + 1 %}
+							<th class="header_{{ system_column.name }} sres-systemcolumn-data sres-searchable-column" data-name="{{ system_column.name }}" data-data="{{ system_column.name }}">
+								{{ system_column.display }}
+								{% if ns.column_counter <= view.config.extra_data.frozencolumns|int %}<span class="fa fa-thumbtack text-muted" aria-hidden="true" title="Column frozen"></span><br>{% endif %}
+							</th>
+						{% endfor %}
+						{% for table_column in vars.visible_columns.user %}
+							{% set ns.column_counter = ns.column_counter + 1 %}
+							<th class="header_{{ table_column.uuid }} sres-column-data sres-searchable-column {% if table_column.x_editable %}sres-x-editable{% endif %}" aria-label="Column header for {{ table_column.name }}"
+                                    data-name="{{ table_column.uuid }}" data-data="{{ table_column.uuid }}" data-sres-data-type="{{ table_column.type }}" data-sres-columnuuid="{{ table_column.uuid }}" data-sres-column-name="{{ table_column.name }}">
+                                {% if vars.is_admin %}
+                                    <div class="sres-column-options-container">
+                                        <div class="input-group">
+                                            <div class="input-group-prepend sres-column-options-checkbox-container d-none" onclick="$(this).find('input:checkbox').trigger('click'); event.stopPropagation();">
+                                                <span class="input-group-text">
+                                                    <input type="checkbox" class="sres-column-options-checkbox" data-sres-columnuuid="{{ table_column.uuid }}" onclick="event.stopPropagation();">
+                                                </span>
+                                            </div>
+                                            <div class="input-group-append">
+                                                <button class="btn btn-sm btn-outline-secondary sres-column-options-button rounded" type="button" 
+                                                        aria-label="Column options for {{ table_column.name }}" title="Column options" data-toggle="dropdown" 
+                                                        onclick="event.stopPropagation(); $(this).siblings('.dropdown-menu').toggle().end().closest('th').trigger('show.bs.dropdown');">
+                                                    <span class="fa fa-ellipsis-h" aria-hidden="true"></span>
+                                                </button>
+                                                <div class="dropdown-menu">
+                                                    {% if table_column.type == "aggregator" %}
+                                                        <a href="{{ url_for('table.edit_column', table_uuid=table.config.uuid, column_uuid=table_column.uuid) }}" target="_blank" class="dropdown-item">
+                                                            <span class="fa fa-cog"></span> Edit aggregator column settings
+                                                        </a>
+                                                        <a href="{{ url_for('table.edit_column', table_uuid=table.config.uuid, column_uuid=table_column.uuid, mode='crosslist') }}" target="_blank" class="dropdown-item">
+                                                            <span class="fa fa-random"></span> Edit aggregator in cross-list mode
+                                                        </a>
+                                                    {% else %}
+                                                        <a href="{{ url_for('table.edit_column', table_uuid=table.config.uuid, column_uuid=table_column.uuid) }}" target="_blank" class="dropdown-item">
+                                                            <span class="fa fa-cog"></span> Edit column settings
+                                                        </a>
+                                                    {% endif %}
+                                                    {% if table_column.type != "aggregator" %}
+                                                        <div class="dropdown-divider"></div>
+                                                        <h6 class="dropdown-header">Data entry by staff</h6>
+                                                        <!-- Data entry -->
+                                                        <a href="{{ url_for('table.show_quick_access_links', table_uuid=table.config.uuid, column_uuid=table_column.uuid) }}" target="_blank" class="dropdown-item">
+                                                            <span class="fa fa-bolt"></span> Get quick access links <span class="badge badge-warning">Staff only</span>
+                                                        </a>
+                                                        <a href="{{ url_for('entry.add_value', table_uuid=table.config.uuid, column_uuid=table_column.uuid) }}" target="_blank" class="dropdown-item"><span class="fa fa-angle-right"></span> Go to data entry page</a>
+                                                        {% if not table_column.has_multiple_report_mode_enabled %}
+                                                            <a href="{{ url_for('entry.add_value_bulk', table_uuid=table.config.uuid, column_uuid=table_column.uuid) }}" target="_blank" class="dropdown-item"><span class="fa fa-angle-double-right"></span> Go to bulk data entry page</a>
+                                                            <a href="{{ url_for('entry.add_value_roll', table_uuid=table.config.uuid, column_uuid=table_column.uuid) }}" target="_blank" class="dropdown-item"><span class="fa fa-th-list"></span> Go to roll view</a>
+                                                        {% endif %}
+                                                        <div class="dropdown-divider"></div>
+                                                        <a href="{{ url_for('table.edit_column_tags', table_uuid=table.config.uuid, column_uuid=table_column.uuid) }}" target="_blank" class="dropdown-item"><span class="fas fa-tags"></span> Edit tags</a>
+                                                        {% if table_column.student_direct_access_active or table_column.student_direct_access_roll_active %}
+                                                            <div class="dropdown-divider"></div>
+                                                            <h6 class="dropdown-header">Data entry by students</h6>
+                                                            {% if table_column.student_direct_access_active %}
+                                                                <li><a href="{{ url_for('table.show_student_direct_access_links', table_uuid=table.config.uuid, column_uuid=table_column.uuid) }}" target="_blank" class="dropdown-item"><span class="fa fa-user-edit"></span> Get student direct access link (single mode)</a>
+                                                            {% endif %}
+                                                            {% if table_column.student_direct_access_roll_active %}
+                                                                <li><a href="{{ url_for('table.show_student_direct_access_links', table_uuid=table.config.uuid, column_uuid=table_column.uuid, mode='roll') }}" target="_blank" class="dropdown-item"><span class="fa fa-user-edit"></span> Get student direct access link (roll mode)</a>
+                                                            {% endif %}
+                                                        {% endif %}
+                                                        <!-- Coversheets 
+                                                        <div class="dropdown-divider" role="separator"></div>
+                                                        <h6 class="dropdown-header">Coversheets</h6>
+                                                        <a href="{{ url_for('table.edit_coversheet', table_uuid=table.config.uuid, column_uuid=table_column.uuid) }}" target="_blank">
+                                                            <span class="fa fa-cog"></span> Make/edit coversheet
+                                                        </a>
+                                                        {% if table_column.coversheet_active %}
+                                                            <li><a href="#"><span class="fa fa-file"></span>Download coversheet</a></li>
+                                                            <li><a href="<cfoutput>emailAllStudentQR.cfm?coversheet=true&columnuuid=#table_column.ColumnUUID#&tableuuid=#table_column.TableUUID#</cfoutput>"><span class="fa fa-envelope"></span> Bulk email coversheets</a></li>
+                                                        {% endif %}-->
+                                                    {% endif %}
+                                                    <div class="dropdown-divider"></div>
+                                                    <a href="{{ url_for('summary.view_summaries_for_column', table_uuid=table.config.uuid, column_uuid=table_column.uuid) }}" target="_blank" class="dropdown-item"><span class="fas fa-layer-group"></span> View and edit summaries</a>
+                                                    {# Bulk data manipulation #}
+                                                    <div class="dropdown-divider"></div>
+                                                    <h6 class="dropdown-header">Bulk data manipulation</h6>
+                                                    <a href="{{ url_for('table.export_data', table_uuid=table.config.uuid, column_uuids=[table_column.uuid]) }}" target="_blank" class="dropdown-item"><span class="fa fa-file-csv"></span> Export current column data to CSV</a>
+                                                    <a href="#" class="dropdown-item sres-export-filtered" data-sres-columnuuid="{{ table_column.uuid }}"><span class="fa fa-file-csv"></span> Export current column data to CSV<br><span class="ml-3"></span>(only filtered students)</a>
+                                                    <a href="{{ url_for('table.download_change_history', table_uuid=table.config.uuid, column_uuid=table_column.uuid, by='user_latest') }}" target="_blank" class="dropdown-item"><span class="fa fa-file-csv"></span> Export latest entry by each user to CSV</a>
+                                                    {% if table_column.has_multiple_report_mode_enabled %}
+                                                        <a href="{{ url_for('table.download_change_history', table_uuid=table.config.uuid, column_uuid=table_column.uuid, by='multiple_reports_latest') }}" target="_blank" class="dropdown-item"><span class="fa fa-file-csv"></span> Export every report to CSV</a>
+                                                    {% endif %}
+                                                    <a href="javascript:void(0);" onClick="applyDataBulk('{{ table_column.uuid }}'); event.stopPropagation();" class="dropdown-item"><span class="fa fa-forward"></span> Apply data to filtered cells</a>
+                                                    {# TODO <!--- View/print column --->
+                                                    <div class="dropdown-divider"></div>
+                                                    <a href="{{ url_for('table.view_column', table_uuid=table.config.uuid, column_uuid=table_column.uuid) }}" target="_blank" class="dropdown-item"><span class="fa fa-print"></span> View/print column</a>
+                                                    #}
+                                                    {# Recalculate aggregation and edit column #}
+                                                    {% if table_column.type == "aggregator" %}
+                                                        <div class="dropdown-divider"></div>
+                                                        <h6 class="dropdown-header">Aggregator</h6>
+                                                        <a href="javascript:void(0);" onclick="recalculateAggregator('{{ table_column.uuid }}'); event.stopPropagation();" class="sres-recalculate-aggregator dropdown-item"><span class="fa fa-calculator"></span> Recalculate data for displayed students</a>
+                                                        <a href="javascript:void(0);" onclick="recalculateAggregatorAll('{{ table_column.uuid }}'); event.stopPropagation();" class="sres-recalculate-aggregator-all dropdown-item"><span class="fa fa-calculator"></span> Recalculate data for all students</a>
+                                                    {% endif %}
+                                                    
+                                                    {% if table_column.apply_to_others.active == 'true' %}
+                                                        <div class="dropdown-divider"></div>
+                                                        <a href="javascript:void(0);" onClick="forceApplyToOthers('{{ table_column.uuid }}'); event.stopPropagation();" class="dropdown-item"><span class="fa fa-expand-arrows-alt"></span> Force apply to others</a>
+                                                    {% endif %}
+
+                                                    {# Auditing functions #}
+                                                    <div class="dropdown-divider"></div>
+                                                    <h6 class="dropdown-header">Auditing functions</h6>
+                                                    <a target="_blank" href="{{ url_for('table.download_change_history', table_uuid=table.config.uuid, column_uuid=table_column.uuid) }}" class="dropdown-item"><span class="fa fa-clock"></span> Export change history</a>
+                                                    {% if table_column.type == "multiEntry" %}
+                                                        <a target="_blank" href="{{ url_for('table.download_change_history', table_uuid=table.config.uuid, column_uuid=table_column.uuid, expme='1') }}" class="dropdown-item"><span class="fa fa-clock"></span> Export change history<br><span class="ml-3"></span>(with subfields expanded)</a>
+                                                    {% endif %}
+                                                    {# TODO
+                                                        {% if table_column.notify_email.active %}
+                                                            <a href="javascript:void(0);" onclick="resendNotificationEmails('{{ table_column.uuid }}'); event.stopPropagation();" class="sres-notification-email-resent dropdown-item"><span class="fa fa-envelope"></span> Resend notification emails for filtered students</a>
+                                                        {% endif %}
+                                                    #}
+                                                    {# TODO
+                                                        <a href="{{ url_for('table.visualise_change_history', table_uuid=table.config.uuid, column_uuid=table_column.uuid) }}" class="dropdown-item"><span class="fa fa-transfer"></span> Visualise audit history</a>
+                                                        <a href="{{ url_for('table.show_multi_edits', table_uuid=table.config.uuid, column_uuid=table_column.uuid) }}" class="dropdown-item"><span class="fa fa-th-list"></span> View multi-edited marks</a>
+                                                    #}
+                                                    {% if table_column.custom_options.restrict_by_username_column|length > 0 %}
+                                                        <a href="{{ url_for('table.show_null_counts', table_uuid=table.config.uuid, column_uuid=table_column.uuid) }}" class="dropdown-item"><span class="fa fa-minus"></span> View null counts</a>
+                                                    {% endif %}
+                                                    {# File link #}
+                                                    {# TODO
+                                                    {% if table_column.file_link or table_column.type == "file" %}
+                                                        <div class="dropdown-divider"></div>
+                                                        <h6 class="dropdown-header">Linked files</h6>
+                                                        <a href="<cfoutput>linkFiles.cfm?columnuuid=#table_column.ColumnUUID#&tableuuid=#table_column.TableUUID#</cfoutput>" class="dropdown-item"><span class="fa fa-paperclip"></span> Link files</a>
+                                                        <a href="<cfoutput>linkFiles.cfm?columnuuid=#table_column.ColumnUUID#&tableuuid=#table_column.TableUUID#&action=deleteall</cfoutput>" class="dropdown-item"><span class="fa fa-trash"></span> Delete and unlink all</a>
+                                                    {% endif %}
+                                                    #}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endif %}
+                                <!-- column title -->
+								<div class="sres-column-title {% if table_column.name|length > 50 %}sres-column-title-xs{% else %}sres-column-title-sm{% endif %}">
+                                    {% if vars.is_admin %}
+                                        <!-- placeholder -->
+                                        <div class="invisible float-right sres-column-options-placeholder">
+                                            <div class="input-group">
+                                                <div class="input-group-prepend sres-column-options-checkbox-container d-none">
+                                                    <span class="input-group-text">
+                                                        <input type="checkbox">
+                                                    </span>
+                                                </div>
+                                                <div class="input-group-append">
+                                                    <button class="btn btn-sm" type="button"><span class="fa fa-ellipsis-h" aria-hidden="true"></span></button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    {% endif %}
+									<span class="sres-column-title-text">
+                                        {% autoescape false %}{{ table_column.name|escape|replace("_", "_<wbr>") }}{% endautoescape %}
+                                    </span>
+									{% if ns.column_counter <= view.config.extra_data.frozencolumns|int %}<span class="fa fa-thumbtack text-muted" aria-hidden="true" title="Column frozen"></span><br>{% endif %}
+								</div>
+								<!-- column description -->
+								{% if table_column.description|length > 0 %}
+									<div class="sres-column-info">
+										<span class="fa fa-info-circle"></span> {{ table_column.description }}
+									</div>
+								{% endif %}
+                                {% if table_column.type == "aggregator" %}
+                                    {% if table_column.aggregator_recalculation_is_manual %}
+                                        <span class="badge badge-warning" data-tippy-content="Recalculation is manually triggered">
+                                            <span class="fa fa-calculator"></span> Manual
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge-success" data-tippy-content="Recalculation is automatically triggered when source data are updated">
+                                            <span class="fa fa-calculator"></span> Automatic
+                                        </span>
+                                    {% endif %}
+                                {% elif table_column.datasource.mode == 'manual' %}
+                                    <!-- column active? -->
+                                    <span class="badge {% if table_column.is_active %}badge-success{% else %}badge-warning{% endif %}" data-tippy-content="{{ table_column.active.from|datetime(format='datetime_with_day') }} - {{ table_column.active.to|datetime(format='datetime_with_day') }}">
+                                        <span class="fa fa-calendar"></span> {% if table_column.is_active %}Active{% else %}Inactive{% endif %}
+                                    </span>
+                                {% elif table_column.datasource.mode == 'sync' %}
+                                    <span class="badge badge-secondary" data-tippy-content="Data is being synchronised from elsewhere">
+                                        <span class="fa fa-sync-alt"></span> Sync'ed
+                                    </span>
+                                {% endif %}
+								<!-- column restricted by username? -->
+								{% if table_column.custom_options.restrict_by_username_column|length > 0 %}
+									<span class="badge badge-info" data-tippy-content="Access restricted by username so that teachers can only edit students who they are allocated to">
+										<span class="fa fa-user"></span> Locked to teacher
+									</span>
+								{% endif %}
+								<!-- datatype -->
+								<span class="badge badge-default">
+									<span class="fa fa-cog"></span>
+									<span data-tippy-content="{{ table_column.type_descriptor.description }}">{{ table_column.type_descriptor.name }}</span>
+								</span>
+                                <!-- student editing enabled -->
+                                {% if table_column.student_editing_allowed %}
+									<span class="badge badge-info" data-tippy-content="Students are permitted to edit column data">
+										<span class="fa fa-user-edit"></span> Student editing allowed
+									</span>
+                                {% endif %}
+                                <!-- student direct access -->
+                                {% if table_column.student_direct_access_active or table_column.student_direct_access_roll_active %}
+									<span class="badge badge-info" data-tippy-content="Students are permitted to access a page where they can enter data directly into this column">
+										<span class="fa fa-user-edit"></span> Student direct access
+									</span>
+                                {% endif %}
+                                <!-- peer data entry -->
+                                {% if table_column.peer_data_entry_active %}
+									<span class="badge badge-info" data-tippy-content="Students are permitted to enter data for peers">
+										<span class="fa fa-user-friends"></span> Peer data entry
+									</span>
+                                {% endif %}
+								<!-- other information -->
+								{% if table_column.notify_email.active == 'true' %}
+									<span class="badge badge-warning" data-tippy-content="Emails being sent as soon as data is saved">
+										<span class="fa fa-envelope"></span> Notifications on
+									</span>
+								{% endif %}
+								{% if table_column.coversheet_active %}
+									<span class="badge badge-default" data-tippy-content="A custom coversheet exists">
+										<span class="fa fa-scroll"></span> Coversheet
+									</span>
+								{% endif %}
+								<!-- scheduled tasks -->
+								{% if table_column.auto_reset.active %}
+                                    {% if table_column.auto_reset.job_exists %}
+                                        <span class="badge badge-info" data-tippy-content="Auto reset active">
+                                            <span class="fa fa-clock"></span> Auto reset
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge-danger" data-tippy-content="Problem with auto reset schedule">
+                                            <span class="fa fa-clock"></span> Auto reset <span class="fa fa-exclamation-triangle"></span>
+                                        </span>
+                                    {% endif %}
+								{% endif %}
+								{% if table_column.auto_backup_email.active %}
+                                    {% if table_column.auto_backup_email.job_exists %}
+                                        <span class="badge badge-info" data-tippy-content="Auto backup to email active">
+                                            <span class="fa fa-clock"></span> Email backup
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge-danger" data-tippy-content="Problem with backup to email schedule">
+                                            <span class="fa fa-clock"></span> Email backup <span class="fa fa-exclamation-triangle"></span>
+                                        </span>
+                                    {% endif %}
+								{% endif %}
+                                <!-- file link -->
+								{% if table_column.file_link == 'true' %}
+									<span class="badge badge-info" data-tippy-content="File linking enabled">
+										<span class="fa fa-paperclip"></span>
+									</span>
+								{% endif %}
+                                <!-- apply to others -->
+								{% if table_column.apply_to_others.active == 'true' %}
+									<span class="badge badge-info" data-tippy-content="Data saved for one student propagates to other students as configured">
+										<span class="fa fa-expand-arrows-alt"></span> Apply to others
+									</span>
+								{% endif %}
+                                <!-- multiple report mode -->
+								{% if table_column.has_multiple_report_mode_enabled %}
+									<span class="badge badge-info" data-tippy-content="Multiple reports can be entered and updated separately">
+										<span class="fa fa-copy"></span> Multiple reports enabled
+									</span>
+								{% endif %}
+							</th>
+						{% endfor %}
+					</tr>
+				</thead>
+				<tbody>
+				</tbody>
+			</table>
+		</div>
+	</div>
+    
+    </main>
+    
+    <!--- generic modal --->
+    <div class="modal fade" tabindex="-1" role="dialog" id="main_modal">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title"></h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                </div>
+                <div class="modal-footer d-none">
+                    <button type="button" class="btn btn-light d-none" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-outline-primary d-none">Save changes</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+
+    <!--- progressbar modal --->
+    {% include 'modal-progress.html' %}
+
+    <!--- bulk apply modal --->
+    <div class="modal fade" tabindex="-1" role="dialog" id="modal_bulk_apply">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title"></h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Data to apply</label>
+                        <input type="text" class="form-control sres-modal-bulk-apply-input">
+                    </div>
+                    <div class="progress hidden sres-modal-progress">
+                        <div class="progress-bar" role="progressbar" style="width: 0%;">
+                        </div>
+                    </div>
+                    <div class="sres-modal-message">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-outline-primary sres-modal-footer-bulk-apply">Apply</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+
+    <!--- save view modal --->
+    <div class="modal fade" tabindex="-1" role="dialog" id="modal_views_save">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Save current view</h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="hidden sres-modal-views-unsaved">
+                        <div class="alert alert-info">It looks like you've customised this view but have yet to save it. If you want to keep the customised column ordering and visibility, you need to save it as a 'custom view'. You can always return to this dialog through <code>List</code> &rarr; <code>Save current view</code> if you're not ready to save it right now.</div>
+                    </div>
+                    <div class="form-group">
+                        <label class="sres-form-label">Name</label>
+                        <input type="text" class="form-control sres-modal-views-save-name">
+                    </div>
+                    <div class="form-group">
+                        <label class="sres-form-label">Description</label>
+                        <input type="text" class="form-control sres-modal-views-save-description">
+                    </div>
+                    <div class="form-group">
+                        <label class="sres-form-label">Set as default view</label>
+                        <div class="form-check">
+                            <input class="form-check-input sres-modal-views-save-default" type="checkbox" id="sres_modal_views_save_default" value="default">
+                            <label class="form-check-label" for="sres_modal_views_save_default">Set as default (overrides any other defaults)</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="sres-form-label">Additional authorised viewers</label>
+                        <p>Give access to this view for people who are already specified as list users (controlled by <a href="{{ url_for('table.edit_table', table_uuid=table.config.uuid) }}">list settings</a>). List administrators and list auditors for this list automatically have access.</p>
+                        <select class="form-control sres-modal-views-authusers" multiple>
+                            {% for user in table.get_authorised_usernames(['user'])['_users'] %}
+                                <option value="{{ user.username }}" {% if view.is_authorised_viewer(user_oid=user._id) %}selected{% endif %}>{{ user.username }}</option>
+                            {% endfor %}
+                        </select>
+                        <p><button type="button" class="btn btn-light sres-modal-views-authusers-addall">Add all list users</button></p>
+                    </div>
+                    <div class="sres-modal-message">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-outline-primary d-none sres-modal-views-save-over">Overwrite existing view</button>
+                    <button type="button" class="btn btn-outline-primary sres-modal-views-save-new">Save as new view</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+
+    <!--- edit columns modal --->
+    <div class="modal fade" tabindex="-1" role="dialog" id="modal_views_edit_columns">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Customise column order and visibility</h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="float-right">
+                        <button type="button" class="btn btn-primary sres-modal-footer-apply" onclick="applyColumnsShowing();">Apply</button>
+                        <button type="button" class="btn btn-light" data-dismiss="modal">Close</button>
+                    </div>
+                    <!--- frozen columns --->
+                    <div class="form-inline mb-3">
+                        <label>Freeze first</label>
+                        <select class="sres-edit-column-visibility-system-freeze-columns form-control ml-2 mr-2">
+                            {% for n in range(0,11) %}
+                                <option value="{{ n }}" {% if view.config.extra_data.frozencolumns == n %}selected{% endif %}>{{ n }}</option>
+                            {% endfor %}
+                        </select>
+                        <label>columns</label>
+                    </div>
+                    <!--- system columns --->
+                    <input type="checkbox" class="check" id="checkAllSystem"> <label for="checkAllSystem">System columns</label>
+                    <ul id="system_column_display_sortable" class="sortable sortable-disabled">
+                        {% for system_column in vars.all_system_columns_info %}
+                            <li data-column="{{ system_column.name }}" class="sres-sortable-item">
+                                <input type="checkbox" name="column_visibility" class="sres-edit-column-visibility sres-edit-column-visibility-system" id="column_visibility_{{ system_column.name }}" {% if system_column.visible %}checked{% endif %}>
+                                <label for="column_visibility_{{ system_column.name }}">{{ system_column.display }}</label>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                    <!--- user-defined columns --->
+                    <input type="checkbox" class="check" id="checkAllUserDefined" /> <label for="checkAllUserDefined">User-defined columns</label>
+                    <ul id="column_display_sortable" class="sortable">
+                        {% for visible_user_column in vars.visible_columns.user %}
+                            <li id="column_display_{{ visible_user_column.uuid }}" data-column="{{ visible_user_column.uuid }}" class="sres-sortable-item">
+                                <span class="fa fa-arrows-alt-v sres-sortable-handle" aria-hidden="true"></span>
+                                <input type="checkbox" name="column_visibility" id="column_visibility_{{ visible_user_column.uuid }}" class="sres-edit-column-visibility sres-edit-column-visibility-user" checked>
+                                <label for="column_visibility_{{ visible_user_column.uuid }}" title="{{ visible_user_column.description }}">{{ visible_user_column.name }}</label>
+                                <a href="{{ url_for('table.edit_column', table_uuid=table.config.uuid, column_uuid=visible_user_column.uuid) }}" title="Edit settings"><span class="fa fa-cog" aria-hidden="true"></span></a>
+                            </li>
+                        {% endfor %}
+                        {% for user_column in vars.all_columns_info if user_column.uuid not in vars.visible_columns_uuids %}
+                            <li id="column_display_{{ user_column.uuid }}" data-column="{{ user_column.uuid }}" class="sres-sortable-item">
+                                <span class="fa fa-arrows-alt-v sres-sortable-handle" aria-hidden="true"></span>
+                                <input type="checkbox" name="column_visibility" id="column_visibility_{{ user_column.uuid }}" class="sres-edit-column-visibility sres-edit-column-visibility-user" {% if user_column.visible %}checked{% endif %}>
+                                <label for="column_visibility_{{ user_column.uuid }}" title="{{ user_column.description }}">{{ user_column.name }}</label>
+                                <a href="{{ url_for('table.edit_column', table_uuid=table.config.uuid, column_uuid=user_column.uuid) }}" title="Edit settings"><span class="fa fa-cog" aria-hidden="true"></span></a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                    <!--- hide rows that are restricted by username --->
+                    <div class="form-inline">
+                        <label>If access to students are restricted for any column, then</label>
+                        <select class="sres-edit-column-show-restricted-by-username form-control ml-2">
+                            <option value="show_all">show students anyway</option>
+                            <option value="hide_if_all_restricted" {% if view.config.extra_data.displayrestricted == "hide_if_all_restricted" %}selected{% endif %}>do not show them</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary sres-modal-footer-apply" onclick="applyColumnsShowing();">Apply</button>
+                    <button type="button" class="btn btn-light" data-dismiss="modal">Close</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+    
+    <!--- merge records (rows) modal --->
+    <div class="modal fade" tabindex="-1" role="dialog" id="modal_merge_records">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Merge records (rows)</h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger">
+                        Warning: only for advanced users. 
+                    </div>
+                    <div class="row">
+                        <div class="col-sm-12 mb-3">
+                            The primary record is the one where the SID is selected. The other (secondary) record will be removed after the merge. For all other fields, you can select the data to retain.
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="alert alert-info">
+                                Record A
+                                <span class="badge badge-primary d-none sres-merge-record-a">Primary record</span>
+                                <span class="badge badge-secondary d-none sres-merge-record-a">Secondary record</span>
+                                <button type="button" class="sres-merge-record-select-all btn btn-light btn-sm" data-sres-merge-record-col="a">Select all</button>
+                            </div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="alert alert-info">
+                                Record B
+                                <span class="badge badge-primary d-none sres-merge-record-b">Primary record</span>
+                                <span class="badge badge-secondary d-none sres-merge-record-b">Secondary record</span>
+                                <button type="button" class="sres-merge-record-select-all btn btn-light btn-sm" data-sres-merge-record-col="b">Select all</button>
+                            </div>
+                        </div>
+                        <div id="modal_merge_records_rows" class="col-sm-12">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary sres-merge-record-apply">Apply</button>
+                    <button type="button" class="btn btn-light" data-dismiss="modal">Close</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+    
+{% endblock %}

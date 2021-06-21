@@ -1,0 +1,585 @@
+{% extends 'base-staff.html' %}
+
+{% import 'collective-share.html' as collective_share %}
+
+{% block title %}
+    {% if vars.collective_sharing %}
+        {{ collective_share.show_title(vars.collective_sharing_mode, 'portal', vars.collective_sharing_asset.config.name) }}
+    {% else %}
+        {% if vars.mode == 'new' %}New portal{% elif vars.mode == 'edit' %}Edit portal - {{ portal.config.name }}{% endif %}
+    {% endif %}
+{% endblock %}
+
+{% block head_css2 %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/query-builder.default.css') }}">
+    <style>
+        #conditions_advanced_expression, #conditions_advanced_expression_friendly {
+            padding: 0.5rem;
+        }
+        .sres-multientry-label {
+            padding: 0.5rem;
+        }
+        .sres-tinymce-editor {
+            padding: 0.5rem;
+        }
+        .rule-filter-container {
+            width: 100%;
+        }
+        .rule-operator-container {
+            width: 25%;
+        }
+        .sres-interpanel-hover-controls {
+            position: absolute;
+            margin-top: -2rem;
+            width: 100%;
+            text-align: right;
+        }
+        .sres-panel-parent {
+            border-left: 1px solid #007bff;
+            border-top: 1px solid #007bff;
+        }
+    </style>
+    <style>
+        .algolia-autocomplete {
+            width: 100%;
+        }
+        .algolia-autocomplete .aa-input, .algolia-autocomplete .aa-hint {
+            width: 100%;
+        }
+        .algolia-autocomplete .aa-hint {
+            color: #999;
+        }
+        .algolia-autocomplete .aa-dropdown-menu {
+        width: 100%;
+        background-color: #fff;
+        border: 1px solid #999;
+        border-top: none;
+        }
+        .algolia-autocomplete .aa-dropdown-menu .aa-suggestion {
+        cursor: pointer;
+        padding: 5px 4px;
+        }
+        .algolia-autocomplete .aa-dropdown-menu .aa-suggestion.aa-cursor {
+        background-color: #B2D7FF;
+        }
+        .algolia-autocomplete .aa-dropdown-menu .aa-suggestion em {
+        font-weight: bold;
+        font-style: normal;
+        }
+    </style>
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/jquery-ui.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/autocomplete.jquery.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tinymce/tinymce.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tinymce/jquery.tinymce.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ajaxq.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    <script>
+        ENV['CHECK_ADVANCED_EXPRESSION_ENDPOINT'] = "{{ url_for('portal.check_advanced_expression') }}";
+        ENV['ENUMERATE_OPERAND_SUGGESTIONS_ENDPOINT'] = "{{ url_for('column.enumerate_operand_suggestions') }}";
+        ENV['SHORTEN_URL_ENDPOINT'] = "{{ url_for('index.shorten_url')|safe }}";
+        ENV['FILE_UPLOAD_ENDPOINT'] = "{{ url_for('file.upload_file') }}";
+        ENV['GET_COLUMN_WRITEABILITY_ENDPOINT'] = "{{ url_for('column.get_writeability') }}";
+        ENV['FONT_FORMATS'] = "{{ vars.FONT_FORMATS }}";
+        var queryBuilderFilters = {{ vars.query_builder_filters|tojson }};
+        var existingPanels = {{ portal.config.panels|tojson }};
+        $(document).ready(function(){
+            listChooserUpdateSelection({{ vars.referenced_table_uuids|tojson }});
+            {% if vars.mode == 'new' %}
+                $('#list_chooser_button_do').trigger('click');
+            {% endif %}
+        });
+    </script>
+    <script src="{{ url_for('static', filename='js/query-builder.standalone.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.query-builder-base.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.column_rereferencer.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.portal-edit.js', rand=range(1000,9999)|random|string) }}"></script>
+{% endblock %}
+
+{% block body %}
+    
+    {% import 'select-users.html' as select_users %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col">
+            <h2>
+                {% if vars.collective_sharing %}
+                    {{ collective_share.show_title(vars.collective_sharing_mode, 'portal', vars.collective_sharing_asset.config.name) }}
+                {% else %}
+                    {% if vars.mode == 'edit' %}
+                        Edit portal {{ portal.config.name }}
+                    {% elif vars.mode == 'new' %}
+                        Create new portal
+                    {% endif %}
+                {% endif %}
+            </h2>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col">
+            {% if vars.mode == 'edit' and not vars.collective_sharing %}
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">
+                        Preview and deploy
+                        <a role="button" data-toggle="collapse" aria-expanded="true" href="#deployment-options">
+                            <span class="fa fa-angle-down sres-collapse-caret"></span>
+                        </a>
+                    </label>
+                    <div class="col-sm-10">
+                        <div class="alert alert-info">
+                            <span class="fa fa-plane-departure"></span>
+                            This student portal is ready for deployment. Choose one of the following <a role="button" data-toggle="collapse" aria-expanded="true" href="#deployment-options">deployment methods</a> to see how.
+                            You can also <a href="{{ url_for('portal.view_portal', portal_uuid=portal.config.uuid, preview=1) }}">preview</a> this portal as a student.
+                        </div>
+                        <div id="deployment-options" class="collapse show">
+                            <nav>
+                                <div class="nav nav-tabs" id="deployment-tabs" role="tablist">
+                                    <a class="nav-item nav-link active" id="deployment-tab-links" data-toggle="tab" href="#deployment-tab-content-links" role="tab" aria-controls="deployment-tab-content-links" aria-selected="true">
+                                        <span class="fa fa-link"></span>
+                                        Direct link
+                                    </a>
+                                    {% if vars.lti_enabled %}
+                                        <a class="nav-item nav-link" id="deployment-tab-lti" data-toggle="tab" href="#deployment-tab-content-lti" role="tab" aria-controls="deployment-tab-content-lti" aria-selected="false">
+                                            <span class="fa fa-plug"></span>
+                                            {{ _('Embed into LMS via LTI') }}
+                                        </a>
+                                    {% endif %}
+                                    <a class="nav-item nav-link" id="deployment-tab-iframe" data-toggle="tab" href="#deployment-tab-content-iframe" role="tab" aria-controls="deployment-tab-content-iframe" aria-selected="false">
+                                        <span class="fa fa-window-maximize"></span>
+                                        iFrame for embedding anywhere
+                                    </a>
+                                </div>
+                            </nav>
+                            <div class="tab-content border-right border-bottom border-left p-3" id="deployment-tabs-content">
+                                <div class="tab-pane fade show active" id="deployment-tab-content-links" role="tabpanel" aria-labelledby="deployment-tab-links">
+                                    <div class="mb-2">
+                                        These links go to the same page. They can be placed anywhere. Users will need to log in to access this portal.
+                                        {% if vars.ALLOW_STUDENT_PORTALS_TO_HAVE_NO_AUTHENTICATION %}
+                                            <span class="fa fa-exclamation-triangle" aria-hidden="true"></span> Ensure the authentication checkbox is ticked in advanced options.
+                                        {% endif %}
+                                    </div>
+                                    <label for="deployment-link-long">Long form</label>
+                                    <textarea class="form-control disabled" readonly id="deployment-link-long">{{ url_for('portal.view_portal', portal_uuid=portal.config.uuid, _external=True) }}</textarea>
+                                    <label for="deployment-link-short" class="mt-2">Short form</label>
+                                    <input type="text" class="form-control disabled" value="" id="deployment-link-short" readonly />
+                                </div>
+                                {% if vars.lti_enabled %}
+                                    <div class="tab-pane fade" id="deployment-tab-content-lti" role="tabpanel" aria-labelledby="deployment-tab-lti">
+                                        <div>
+                                            <span class="fa fa-info-circle"></span>
+                                            {{ _('Navigate to the learning management system and use its editing functions to insert this SRES portal.') }}
+                                        </div>
+                                    </div>
+                                {% endif %}
+                                <div class="tab-pane fade" id="deployment-tab-content-iframe" role="tabpanel" aria-labelledby="deployment-tab-iframe">
+                                    <div>Copy and paste this code into any HTML editor.</div>
+                                    <textarea class="form-control disabled" readonly rows="4"><iframe style="width:100%; height:100%; min-height:800px" src="{{ url_for('portal.view_portal', portal_uuid=portal.config.uuid, _external=True) }}" frameborder="0"></iframe></textarea>
+                                </div>
+                            </div>                    
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+            <form method="post" action="{{ url_for('portal.edit_portal', portal_uuid=portal.config.uuid) }}" id="sv_edit_form" enctype="multipart/form-data" data-sres-role="main_form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                {% if vars.collective_sharing %}
+                    {{ collective_share.render_collective_metadata_fields(vars.collective_sharing_asset, select_users, vars.collective_sharing_mode, 'portal', vars) }}
+                {% endif %}
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Portal name</label>
+                    <div class="col-sm-10">
+                        <input type="text" name="portal_name" id="portal_name" value="{{ request.form.portal_name or portal.config.name }}" required class="form-control" data-sres-required>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Portal description</label>
+                    <div class="col-sm-10">
+                        <input type="text" name="portal_description" value="{{ request.form.portal_description or portal.config.description }}" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Make portal available</label>
+                    <div class="col-sm-10">
+                        <input type="checkbox" name="view_active" id="view_active" value="1" {% if portal.config.active.available %}checked{% endif %}>
+                        <label for="view_active">Allow students to access this portal</label>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Active dates</label>
+                    <div class="col-sm-10 form-inline">
+                        <label>From&nbsp;</label>
+                        <input type="date" name="available_from" id="available_from" value="{{ (request.form.available_from or portal.config.active.from)|datetime }}" class="form-control" required pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" placeholder="yyyy-mm-dd" autocomplete="off" />
+                        <label>&nbsp;to&nbsp;</label>
+                        <input type="date" name="available_to" id="available_to" value="{{ (request.form.available_to or portal.config.active.to)|datetime }}" class="form-control" required pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" placeholder="yyyy-mm-dd" autocomplete="off" />
+                        <span class="d-none text-danger ml-2" id="available_dates_unavailable">
+                            <span class="fa fa-calendar-times" aria-hidden="true"></span> Because these dates do <em>not</em> include today, note that this student portal will be <em>currently</em> unavailable to students.
+                        </span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">
+                        Authorised administrators
+                        <span class="fa fa-question-circle" data-tippy-content="Users with an 'admnistrator' role can control and see everything about this portal." aria-hidden="true"></span>
+                    </label>
+                    <div class="col-sm-10">
+                        <div class="row">
+                            {{ select_users.select_user_fields(
+                                    id='administrator', 
+                                    usernames=request.form['authorised_administrators'] or portal.get_authorised_usernames()
+                                )
+                            }}
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label">
+                        <a role="button" data-toggle="collapse" href=".sres-advanced-options">
+                            Advanced options <span class="fa fa-angle-down sres-collapse-caret"></span>
+                        </a>
+                    </label>
+                    <div class="col-sm-10">
+                    </div>
+                </div>
+                {% if vars.ALLOW_STUDENT_PORTALS_TO_HAVE_NO_AUTHENTICATION %}
+                    <div class="form-group row sres-advanced-options collapse">
+                        <label class="col-sm-2 col-form-label sres-form-label">Authentication</label>
+                        <div class="col-sm-10">
+                            <span class="fa fa-exclamation-sign text-danger" aria-hidden="true">
+                                Whether students need to enter their username and password to prove who they are.
+                                If this option is not set, it is possible that students could modify the deployment code and access other students' data.
+                                This may not always be an issue.
+                            </span>
+                            <input type="checkbox" name="require_authentication" id="require_authentication" value="1" {% if (request.form.require_authentication == '1' or portal.config.require_auth) %}checked{% endif %}>
+                            <label for="require_authentication">Require students to authenticate to view (recommended)</label>
+                        </div>
+                    </div>
+                {% else %}
+                    <input type="hidden" name="require_authentication" value="1">
+                {% endif %}
+                <div class="form-group row sres-advanced-options collapse">
+                    <label class="col-sm-2 col-form-label sres-form-label">Authorisation</label>
+                    <div class="col-sm-10 form-inline">
+                        <label>If a student is not found&nbsp;</label>
+                        <select name="extra_config_if_student_unknown" class="form-control">
+                            <option value="disallow">
+                                do not let them access this portal
+                            </option>
+                            <option value="addextra" {% if (request.form.extra_config_if_student_unknown or portal.config.if_student_unknown) == 'addextra' %}selected{% endif %}>
+                                add them as an extra student to the lists associated with this portal
+                            </option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group row sres-advanced-options collapse">
+                    <label class="col-sm-2 col-form-label sres-form-label">
+                        Request feedback from students
+                        <span class="fa fa-question-circle" data-tippy-content="A short feedback request can be shown, asking whether the portal has been helpful. Responses will be recorded to the database and viewable in a dashboard." aria-hidden="true">
+                    </label>
+                    <div class="col-sm-10 form-inline">
+                        <select name="feedback_request" class="form-control">
+                            <option value="helpfulyesno">Request feedback</option>
+                            <option value="null" {% if portal.config.feedback.style == "null" %}selected{% endif %}>Do not request feedback</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group row sres-advanced-options collapse">
+                    <label class="col-sm-2 col-form-label sres-form-label">Max width</label>
+                    <div class="col-sm-10 form-inline">
+                        <label for="max_width_px">Maximum width for portal content</label>
+                        <input type="number" name="max_width_px" id="max_width_px" class="form-control ml-2 mr-2" value="{{ request.form.max_width_px or portal.config.max_width_px }}">
+                        <label>pixels (leave blank for no max width)</label>
+                    </div>
+                </div>
+                <div class="form-group row sres-advanced-options collapse">
+                    <label class="col-sm-2 col-form-label sres-form-label">Auto-reload portal</label>
+                    <div class="col-sm-10 form-inline">
+                        <label for="reload_portal_interval">Set the portal to reload automatically every</label>
+                        <input type="number" name="reload_portal_interval" id="reload_portal_interval" class="form-control ml-2 mr-2" value="{{ request.form.reload_portal_interval or portal.config.reload_portal_interval }}">
+                        <label for="reload_portal_interval">minutes (leave blank to disable)</label>
+                    </div>
+                </div>
+                <div class="form-group row sres-advanced-options collapse">
+                    <label class="col-sm-2 col-form-label sres-form-label">
+                        Authorised teachers
+                        <span class="fa fa-question-circle" data-tippy-content="Users with a 'teacher' role will be able to view this portal as students, and also have the ability to input data if this is configured." aria-hidden="true"></span>
+                    </label>
+                    <div class="col-sm-10">
+                        <div class="row">
+                            {{ select_users.select_user_fields(
+                                    id='teacher', 
+                                    usernames=request.form['authorised_teachers'] or portal.get_authorised_usernames('teacher')
+                                )
+                            }}
+                        </div>
+                        <div class="form-check form-check-inline mt-2">
+                            <input class="form-check-input" type="checkbox" id="portal_active_for_teachers" name="portal_active_for_teachers" value="1" {% if portal.config.active.available_to_teachers %}checked{% endif %}>
+                            <label class="form-check-label" for="portal_active_for_teachers">Allow teachers to access this portal</label>
+                        </div>
+                        <div class="form-inline mt-2">
+                            <label>Limit data access according to staff allocation defined in</label>
+                            <input type="hidden" id="authorised_teachers_limit_by_columnuuid" name="authorised_teachers_limit_by_columnuuid" 
+                                data-sres-tableuuid="{% if vars.teachers_limit_by_column._id %}{{ vars.teachers_limit_by_column.table.config.uuid }}{% endif %}"
+                                value="{% if vars.teachers_limit_by_column._id %}{{ vars.teachers_limit_by_column.config.uuid }}{% endif %}"
+                                class="sres-condition-column-receiver sres-column-rereferenceable sres-column-rereferenceable-chooser">
+                            <span id="authorised_teachers_limit_by_columnuuid" class="ml-2 sres-condition-column-placeholder">
+                                {% if vars.teachers_limit_by_column._id %}
+                                    {{ vars.teachers_limit_by_column.get_friendly_name() }}
+                                {% else %}
+                                    Pick a column
+                                {% endif %}
+                            </span>
+                            <span class="sres-condition-column-remove"><span class="fa fa-times"></span></span>
+                            <span class="fa fa-question-circle" data-tippy-content="If this option is set, teachers will only be able to access students that they have been allocated to via the specified 'teacher allocation' special column." aria-hidden="true"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row sres-advanced-options collapse">
+                    <label class="col-sm-2 col-form-label sres-form-label">
+                        Authorised viewers
+                        <span class="fa fa-question-circle" data-tippy-content="Users with a 'viewer' role will be able to view this portal as students but only in read-only." aria-hidden="true"></span>
+                    </label>
+                    <div class="col-sm-10">
+                        <div class="row">
+                            {{ select_users.select_user_fields(
+                                    id='viewer', 
+                                    usernames=request.form['authorised_viewers'] or portal.get_authorised_usernames('viewer')
+                                )
+                            }}
+                        </div>
+                        <div class="form-check form-check-inline mt-2">
+                            <input class="form-check-input" type="checkbox" id="portal_active_for_viewers" name="portal_active_for_viewers" value="1" {% if portal.config.active.available_to_viewers %}checked{% endif %}>
+                            <label class="form-check-label" for="portal_active_for_viewers">Allow viewers to access this portal</label>
+                        </div>
+                        <div class="form-inline mt-2">
+                            <label>Limit data access according to staff allocation defined in</label>
+                            <input type="hidden" id="authorised_viewers_limit_by_columnuuid" name="authorised_viewers_limit_by_columnuuid" 
+                                data-sres-tableuuid="{% if vars.viewers_limit_by_column._id %}{{ vars.viewers_limit_by_column.table.config.uuid }}{% endif %}"
+                                value="{% if vars.viewers_limit_by_column._id %}{{ vars.viewers_limit_by_column.config.uuid }}{% endif %}"
+                                class="sres-condition-column-receiver sres-column-rereferenceable sres-column-rereferenceable-chooser">
+                            <span id="authorised_viewers_limit_by_columnuuid" class="ml-2 sres-condition-column-placeholder">
+                                {% if vars.viewers_limit_by_column._id %}
+                                    {{ vars.viewers_limit_by_column.get_friendly_name() }}
+                                {% else %}
+                                    Pick a column
+                                {% endif %}
+                            </span>
+                            <span class="sres-condition-column-remove"><span class="fa fa-times"></span></span>
+                            <span class="fa fa-question-circle" data-tippy-content="If this option is set, viewers will only be able to access students that they have been allocated to via the specified 'teacher allocation' special column." aria-hidden="true"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Panels</label>
+                    <div class="col-sm-10">
+                        <input type="hidden" name="panels">
+                        <div class="form-group">
+                            <div class="text-muted mb-3">
+                                Customise the student portal by adding panels. Set up each panel according to your needs.
+                                Each panel can display personalised text or rich content.
+                                Panels can be displayed at all times, or conditionally.
+                            </div>
+                            <div id="panel_container" class="col">
+                                <div id="panel_template" class="d-none mb-3 sres-panel-parent row py-2">
+                                    <div class="col-sm-12 form-inline mb-2">
+                                        <label class="mr-2 mb-2">Panel</label>
+                                        <button type="button" class="btn btn-light mr-2 mb-2" id="panel_raise-panel-x" aria-label="Move panel up" data-tippy-content="Move panel up">
+                                            <span class="fa fa-angle-up"></span>
+                                        </button>
+                                        <button type="button" class="btn btn-light mr-2 mb-2" id="panel_lower-panel-x" aria-label="Move panel down" data-tippy-content="Move panel up">
+                                            <span class="fa fa-angle-down"></span>
+                                        </button>
+                                        <button type="button" class="btn btn-light mr-2 mb-2" id="panel_delete-panel-x" aria-label="Delete panel" data-tippy-content="Delete panel">
+                                            <span class="fa fa-trash"></span>
+                                        </button>
+                                        <button type="button" class="btn btn-light mr-2 mb-2" id="panel_clone-panel-x" aria-label="Clone panel" data-tippy-content="Clone panel">
+                                            <span class="fa fa-clone"></span>
+                                        </button>
+                                        {# show_when selector #}
+                                        <select class="form-control mr-2 mb-2 sres-panel-show-when" id="panel_showwhen-panel-x" name="panel_showwhen-panel-x">
+                                            <option value="always">Show to all students</option>
+                                            <option value="conditions">Only show if conditions are met</option>
+                                        </select>
+                                        {# mode selector #}
+                                        <select class="form-control mr-2 mb-2 sres-panel-mode-selector" id="panel_mode-panel-x" name="panel_mode-panel-x">
+                                            <option value="read">Panel is read-only</option>
+                                            <option value="write">Student input allowed</option>
+                                            <option value="readonly-inputs">Show read-only input fields</option>
+                                            <option value="show-inputs">Always show input fields</option>
+                                        </select>
+                                        {# writeable panel notice #}
+                                        <span id="panel_mode_warning-panel-x" class="d-none mr-2 mb-2" data-tippy-content="Any column references that are placed inside <em>this</em> panel will be automatically turned into an editable field that students can update themselves. To enable this, you <strong>must</strong> also separately update the column settings for each column to enable the editing-by-students permission.">
+                                            <span class="fa fa-info-circle" aria-hidden="true"></span>
+                                            Important notice about writeable panels
+                                        </span>
+                                        {# availability selector #}
+                                        <select class="form-control mr-2 mb-2" id="panel_availability-panel-x" name="panel_availability-panel-x">
+                                            <option value="available">Panel is available</option>
+                                            <option value="unavailable">Panel is unavailable</option>
+                                            <option value="available-between">Panel is only available between...</option>
+                                        </select>
+                                        <div id="panel_availability_config-panel-x" class="d-none mb-2 mr-2">
+                                            Available from
+                                            <input type="date" name="panel_availability_from_date-panel-x" id="panel_availability_from_date-panel-x" aria-label="Available from date" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" placeholder="yyyy-mm-dd" class="form-control" autocomplete="off" value="{{ vars.now|datetime('date') }}" /> 
+                                            <input type="time" step="1" name="panel_availability_from_time-panel-x" id="panel_availability_from_time-panel-x" aria-label="Available from time" pattern="([01]\d|2[0-3]):([0-5]\d):([0-5]\d)" placeholder="hh:mm:ss" class="form-control" autocomplete="off" value="00:00:00" /> 
+                                            to
+                                            <input type="date" name="panel_availability_to_date-panel-x" id="panel_availability_to_date-panel-x" aria-label="Available to date" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" placeholder="yyyy-mm-dd" class="form-control" autocomplete="off" value="{{ vars.now|datetime('date') }}" /> 
+                                            <input type="time" step="1" name="panel_availability_to_time-panel-x" id="panel_availability_to_time-panel-x" aria-label="Available to time" pattern="([01]\d|2[0-3]):([0-5]\d):([0-5]\d)" placeholder="hh:mm:ss" class="form-control" autocomplete="off" value="23:59:59" /> 
+                                        </div>
+                                        {# collapsible selector #}
+                                        <select class="form-control mr-2 mb-2" id="panel_collapsible-panel-x" name="panel_collapsible-panel-x">
+                                            <option value="disabled">Panel is not collapsible</option>
+                                            <option value="enabled">Panel is collapsible</option>
+                                            <option value="linked">Panel is collapsible and linked to previous</option>
+                                        </select>
+                                        <select class="form-control mr-2 mb-2 d-none" id="panel_collapsible_default_display-panel-x" name="panel_collapsible_default_display-panel-x">
+                                            <option value="show">Expanded by default</option>
+                                            <option value="collapse">Collapsed by default</option>
+                                        </select>
+                                        {# reloadable selector #}
+                                        <select class="form-control mr-2 mb-2 d-none" id="panel_trigger_reload_on_save-panel-x" name="panel_trigger_reload_on_save-panel-x">
+                                            <option value="disabled">Do not reload portal</option>
+                                            <option value="enabled">Reload portal when data is successfully saved</option>
+                                        </select>
+                                        {# writeable panel column configuration warning #}
+                                        <span id="panel_mode_unwriteable_columns_warning-panel-x" class="d-none mr-2 mb-2 text-danger">
+                                            <span class="fa fa-exclamation-triangle" aria-hidden="true"></span>
+                                            This panel is set to allow student input, but one or more of the column(s) refererred to in this panel may not be configured with the right permissions to allow this.
+                                            <span class="sres-unwriteable-columns-list"></span>
+                                            You can <a href="javascript:void(0);" class="sres-unwriteable-columns-recheck">check again</a> once the column settings have been updated.
+                                        </span>
+                                    </div>
+                                    <div class="col-sm-12">
+                                        <div id="panel_content-panel-x" class="sres-tinymce-editor tinymce-basic border rounded sres-column-rereferenceable sres-column-rereferenceable-html" ></div>
+                                        <button type="button" class="btn btn-sm sres-select-column-trigger sres-disable-upon-translate-column-references">
+                                            <span class="fa fa-dollar-sign" aria-hidden="true"></span> Insert column reference
+                                        </button>
+                                        <button type="button" class="btn btn-sm sres-translate-column-references" data-sres-current-mode="design" data-sres-uuid="{{ portal.config.uuid }}">Show friendly column names</button>
+                                        <button type="button" class="btn btn-sm sres-multi-column-magic-formatter-insert sres-disable-upon-translate-column-references">
+                                            <span class="fa fa-layer-group" aria-hidden="true"></span> Insert multi-column magic formatter
+                                        </button>
+                                    </div>
+                                    <div class="col-sm-12 sres-querybuilder-container collapse" id="panel_conditions-panel-x">
+                                    </div>
+                                    <input type="hidden" name="rules_for_panel_conditions-panel-x" id="rules_for_panel_conditions-panel-x">
+                                    <input type="hidden" name="panel_uuid-panel-x" id="panel_uuid-panel-x">
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <button type="button" class="btn btn-primary btn-sm" id="add_panel">
+                                    <span class="fa fa-plus" aria-hidden="true"></span> Add panel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col">
+                        <input type="hidden" name="portal_uuid" value="{{ portal.config.uuid }}" />
+                        <input type="hidden" name="action" value="{{ vars.mode }}" />
+                        {% if not vars.collective_sharing %}
+                            <button id="btn_save" class="btn btn-primary" name="save_action" value="save">
+                                <span class="fa fa-save"></span> Save
+                            </button>
+                            {% if vars.mode == 'edit' %}
+                                <button id="btn_save" class="btn btn-outline-primary" name="save_action" value="save_and_preview">
+                                    <span class="fa fa-save"></span> Save and preview
+                                </button>
+                                <a href="{{ url_for('portal.view_portal', portal_uuid=portal.config.uuid, preview=1) }}" role="button" class="btn btn-outline-primary">
+                                    <span class="fa fa-eye"></span> Preview without saving
+                                </a>
+                                <button type="button" class="btn btn-outline-primary sres-column-rereferencer-show">
+                                    <span class="fa fa-random" aria-hidden="true"></span> Re-reference columns
+                                </button>
+                                <a href="{{ url_for('portal.clone_portal', portal_uuid=portal.config.uuid) }}" role="button" class="btn btn-outline-primary">
+                                    <span class="fa fa-clone" aria-hidden="true"></span> Clone portal
+                                </a>
+                                <a href="{{ url_for('collective.share_asset', asset_type='portal', source_asset_uuid=portal.config.uuid) }}" role="button" class="btn btn-outline-primary">
+                                    <span class="fa fa-share-alt"></span> Share to SRES Collective
+                                </a>
+                                <a href="{{ url_for('portal.convert_to_filter', portal_uuid=portal.config.uuid) }}" role="button" class="btn btn-outline-primary">
+                                    <span class="fa fa-filter"></span> Convert to filter
+                                </a>
+                                <a href="{{ url_for('portal.delete_portal', portal_uuid=portal.config.uuid) }}" role="button" class="btn btn-outline-danger">
+                                    <span class="fa fa-trash"></span>
+                                    Delete
+                                </a>
+                            {% endif %}
+                        {% elif vars.collective_sharing %}
+                            {{ collective_share.render_collective_action_buttons(vars.collective_sharing_asset, vars.collective_sharing_mode, vars) }}
+                        {% endif %}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    {% import 'select-column.html' as select_column %}
+    {{ select_column.column_chooser(
+        available_tables=vars.authorised_tables,
+        student_info_items=vars.SYSTEM_COLUMNS,
+        magic_formatters_list=vars.MAGIC_FORMATTERS_LIST,
+        general_fields_items=vars.GENERAL_FIELDS,
+        show_summaries=True
+    ) }}
+    
+    {{ select_users.find_user() }}
+    {{ select_users.bulk_edit_users() }}
+    
+    {% import 'column-rereferencer.html' as column_rereferencer %}
+    {{ column_rereferencer.column_rereferencer(available_tables=vars.authorised_tables) }}
+    
+    <!-- modal for delete portal -->
+    <div class="modal fade" id="confirm_delete" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Are you sure?</h4>
+                </div>
+                <div class="modal-body">
+                    <span class="fa fa-alert" aria-hidden="true"></span>
+                    Warning: all data currently in this portal will be <strong>lost permanently</strong> if you proceed.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-dismiss="modal">Do not delete</button>
+                    <button type="button" id="deleteButton" class="btn btn-danger" data-sres-action="{{ url_for('portal.delete_portal', portal_uuid=portal.config.uuid) }}">Confirm delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- modal for submission validation check -->
+    <div class="modal fade" tabindex="-1" role="dialog" id="submit_check_warning">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Something's not quite right</h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body" id="submit_check_warning_body">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-dismiss="modal">Thanks for letting me know</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+    
+    
+{% endblock %}

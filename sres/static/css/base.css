@@ -1,0 +1,62 @@
+.fa.spinning {
+    animation: spin 1s infinite linear;
+    -webkit-animation: spin2 1s infinite linear;
+}
+
+a[aria-expanded='true'] > .sres-collapse-caret {
+    transform: rotate(180deg);
+}
+
+@keyframes spin {
+    from { transform: scale(1) rotate(0deg); }
+    to { transform: scale(1) rotate(360deg); }
+}
+@-webkit-keyframes spin2 {
+    from { -webkit-transform: rotate(0deg); }
+    to { -webkit-transform: rotate(360deg); }
+}
+
+.sres-form-label {
+    font-weight: bold;
+}
+
+.sres-white-space-normal {
+    white-space: normal !important;
+}
+
+.sres-clickable {
+    cursor: pointer;
+}
+
+textarea {
+    overflow: auto !important;
+}
+
+.bg-primary-light {
+    background-color: #cce5ff;
+}
+.bg-info-light {
+    background-color: #d1ecf1;
+}
+.bg-danger-light {
+    background-color: #f8d7da;
+}
+.bg-warning-light {
+    background-color: #fff3cd;
+}
+.bg-success-light {
+    background-color: #d4edda;
+}
+
+.sres-bootstrap-overrides h1 {
+    font-size: 1.8rem;
+}
+.sres-bootstrap-overrides h2 {
+    font-size: 1.6rem;
+}
+.sres-bootstrap-overrides h3 {
+    font-size: 1.4rem;
+}
+.sres-bootstrap-overrides h4 {
+    font-size: 1.2rem;
+}

@@ -1,0 +1,151 @@
+{% extends 'base-staff.html' %}
+
+{% set table_uuid = table.config.uuid %}
+
+{% block title %}
+    Clone list - {{ table.config.code }}
+{% endblock %}
+
+{% block head_css2 %}
+	<style>
+		.sres-column-link {
+			cursor: pointer;
+		}
+	</style>
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/jsplumb.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.table-clone.js') }}"></script>
+    <script>
+        {% for column_uuid, column in vars.source_table_columns.items() %}
+            columnConnections = columnConnections.concat({{ column.references._for_js|jsondump|safe }});
+        {% endfor %}
+    </script>
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col">
+            <h2>Clone {{ table.get_full_name() }}</h2>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col">
+            <form method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Clone mode</label>
+                    <div class="col-sm-10">
+                        <div>
+                            <select name="clone_mode" class="form-control">
+                                <option value="new">Clone into new list</option>
+                                <option value="existing">Clone into existing list</option>
+                            </select>
+                        </div>
+                        <div class="sres-clone-list-mode sres-clone-list-new mt-3">
+                            <div class="form-group row">
+                                <label for="list_code" class="col-sm-2 col-form-label">Unit code</label>
+                                <input type="text" class="form-control col-sm-9" name="list_code" id="list_code" value="{{ table.config.code }} CLONE" required>
+                            </div>
+                            <div class="form-group row">
+                                <label for="list_name" class="col-sm-2 col-form-label">Unit name</label>
+                                <input type="text" class="form-control col-sm-9" name="list_name" id="list_name" value="Clone of {{ table.config.name }}" required>
+                            </div>
+                            <div class="form-group row">
+                                <label for="list_year" class="col-sm-2 col-form-label">Calendar year</label>
+                                <input type="text" class="form-control col-sm-9" name="list_year" id="list_year" value="{{ vars.now.year }}" required>
+                            </div>
+                            <div class="form-group row">
+                                <label for="list_semester" class="col-sm-2 col-form-label">Semester</label>
+                                <input type="text" class="form-control col-sm-9" name="list_semester" id="list_semester" value="{{ table.config.semester }}" required>
+                            </div>
+                        </div>
+                        <div class="sres-clone-list-mode sres-clone-list-existing d-none mt-3">
+                            <label for="clone_mode_existing_list">Choose existing list</label>
+                            <select name="clone_mode_existing_list" id="clone_mode_existing_list">
+                                {% for authorised_table in vars.authorised_tables %}
+                                    <option value="{{ authorised_table.uuid }}">{{ authorised_table.code }} {{ authorised_table.name }} ({{ authorised_table.year }} semester {{ authorised_table.semester }})</option></cfoutput>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Clone columns</label>
+                    <div class="col-sm-10">
+                        <div class="mb-3">
+                            <button type="button" class="btn btn-default sres-select-column-toggle-all">Toggle all</button>
+                            <button type="button" class="btn btn-default sres-select-column-select-all">Select all</button>
+                            <button type="button" class="btn btn-default sres-select-column-unselect-all">Unselect all</button>
+                        </div>
+                        {% for column_uuid, column in vars.source_table_columns.items() %}
+                            <p>
+                                <label class="sres-column-label">
+                                    <input type="checkbox" name="select_column" value="{{ column_uuid }}">
+                                    <span>{{ column.name }}</span>
+                                </label>
+                                <a href="{{ url_for('table.edit_column', table_uuid=table.config.uuid, column_uuid=column_uuid) }}" target="_blank"><span class="glyphicon glyphicon-cog" aria-hidden="true"></span></a>
+                                <span class="text-muted">{{ column.description }}</span>
+                                <span class="sres-column-link sres-column-link-in" title="Highlight columns that this column references or uses"><span class="fa fa-link" aria-hidden="true"></span></span>
+                                <span class="sres-column-link sres-column-link-out" title="Highlight columns that reference or use this column"><span class="fa fa-expand-arrows-alt" aria-hidden="true"></span></span>
+                                <span id="sres_column_{{ column_uuid }}" data-sres-columnuuid="{{ column_uuid }}">&nbsp;</span>
+                            </p>
+                        {% endfor %}
+                        <div class="mb-3">
+                            <button type="button" class="btn btn-default sres-select-column-toggle-all">Toggle all</button>
+                            <button type="button" class="btn btn-default sres-select-column-select-all">Select all</button>
+                            <button type="button" class="btn btn-default sres-select-column-unselect-all">Unselect all</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Timeshift</label>
+                    <div class="col-sm-10">
+                        <div class="form-group">
+                            <select name="column_timeshift" class="form-control">
+                                <option value="shift">Timeshift cloned columns</option>
+                                <option value="noshift">Do not adjust dates for cloned columns</option>
+                            </select>
+                        </div>
+                        <div class="sres-column-timeshift-container form-inline">
+                            <div class="form-group">
+                                <label for="timeshift_from">Timeshift</label>
+                                <input type="date" class="form-control ml-2" name="timeshift_from" id="timeshift_from" value="{{ vars.earliest_date|datetime }}" required>
+                            </div>
+                            <div class="form-group ml-2">
+                                <label for="timeshift_to">to</label>
+                                <input type="date" class="form-control ml-2" name="timeshift_to" id="timeshift_to" value="{{ vars.now|datetime }}" required>
+                            </div>
+                            <span class="sres-timeshift-diff text-primary ml-2">
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Perform cloning</label>
+                    <div class="col-sm-10">
+                        <button type="submit" class="btn btn-primary">Perform cloning</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+{% endblock %}

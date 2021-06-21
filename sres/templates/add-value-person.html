@@ -1,0 +1,149 @@
+{% extends 'base-add-value.html' %}
+
+{% block title %}
+    Show single student
+{% endblock %}
+
+{% block head_css2 %}
+{% endblock %}
+
+{% block head_js2 %}
+    <script>
+        ENV['identifier'] = "{{ vars.identifier }}";
+        ENV['ADD_STUDENT_ENDPOINT'] = "{{ url_for('table.add_student', table_uuid=table.config.uuid)|safe }}";
+        ENV['MODE'] = "{{ vars.mode }}";
+        ENV['set_data_endpoint'] = "{{ url_for('table.set_data', table_uuid=table.config.uuid, column_uuid='__column_uuid__')|safe }}";
+        ENV['VIEW_SINGLE_STUDENT_ENDPOINT'] = "{{ url_for('entry.view_single_student', table_uuid=table.config.uuid, mode='view', identifier='__identifier__')|safe }}"
+        $(document).ready(function(){
+            $('.navbar .navbar-brand').html("{% if vars.mode == 'new' %}Add student{% else %}Student info{% endif %}");
+            $('.sres-nav-data-entry-mode-selector').addClass('d-none');
+        });
+    </script>
+    <script src="{{ url_for('static', filename='js/ajaxq.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.add-value.js') }}?rand={{ ''|rand }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.add-value-person.js') }}?rand={{ ''|rand }}"></script>
+{% endblock %}
+
+{% block body %}
+    
+    {% import 'add-value-modules.html' as add_value_modules %}
+    
+    {% if (vars.mode == 'view' and vars.identifier_found) or vars.mode == 'new' %}
+        <div class="card mt-3 mb-3" id="identifier_container">
+            <div class="card-header sres-add-value-container-header" id="identifier_container_header" data-toggle="collapse" data-target="#identifier_container_collapse" aria-expanded="true" aria-controls="collapseOne">
+                <span class="fa fa-angle-right"></span> Identifiers
+            </div>
+            <div id="identifier_container_collapse" class="collapse show" aria-labelledby="identifier_container_header">
+                <div class="card-body">
+                    {% for system_column in vars.SYSTEM_COLUMNS %}
+                        <div class="form-group row">
+                            <label class="col-sm-2">{{ system_column.display }}</label>
+                            <div class="col-sm-10">
+                                <input type="text" class="sres-system-column-data form-control" id="system_{{ system_column.name }}"
+                                    value="{% if student_data.config[system_column.name] is not none %}{% if vars.is_identity_anonymiser_active %}{{ student_data.config[system_column.name]|anonymise_field(system_column.name) }}{% else %}{{ student_data.config[system_column.name] }}{% endif %}{% endif %}"
+                                    data-sres-system-column-name="{{ system_column.name }}"
+                                    aria-describedby="" placeholder="">
+                            </div>
+                        </div>
+                    {% endfor %}
+                    <div class="form-group row">
+                        <div class="col-sm-2"></div>
+                        <div class="col-sm-10">
+                            <button type="button" class="btn btn-primary" id="save_system_column_data">Save</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+    
+    {% if vars.mode == 'view' and vars.identifier_found %}
+        <div class="form-group row" id="element_search_container">
+            <div class="col">
+                <div class="input-group">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text">
+                            {% if student_data.config['preferred_name']|length != 0 %}
+                                {{ student_data.config['preferred_name'] }}'s data
+                            {% else %}
+                                Data
+                            {% endif %}
+                        </span>
+                    </div>
+                    <input type="text" class="form-control" placeholder="Filter columns/fields by name" id="element_search_term">
+                    <div class="input-group-append">
+                        <button type="button" class="btn btn-outline-primary" id="element_search_clear">Clear filter</button>
+                        <button type="button" class="btn btn-outline-primary" id="element_collapse_all"><span class="fa fa-minus-square"></span> Collapse</button>
+                        <button type="button" class="btn btn-outline-primary" id="element_expand_all"><span class="fa fa-plus-square"></span> Expand</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% for column_uuid, current_column in columns.items() %}
+            <div class="card mt-3 mb-3 sres-column-data-container" id="{{ column_uuid }}_container">
+                <div class="card-header sres-add-value-container-header" id="{{ column_uuid }}_container_header" data-toggle="collapse" data-target="#{{ column_uuid }}_container_collapse" aria-expanded="true" aria-controls="collapseOne">
+                    <span class="fa fa-angle-right"></span>
+                    {{ current_column.config.name }}
+                    <span class="text-muted">{{ current_column.config.description }}</span>
+                </div>
+                <div id="{{ column_uuid }}_container_collapse" class="sres-column-data-container-body collapse show" aria-labelledby="{{ column_uuid }}_container_header">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col">
+                                {% if current_column.config.type == 'mark' and current_column.config.simple_input.allow_free == 'false' and current_column.config.simple_input.options|length == 0 %}
+                                    {# current column not configured for data entry; so display simple editor #}
+                                    {% set show_simple_editor_override = true %}
+                                {% endif %}
+                                {% if current_column.is_user_authorised(authorised_roles=['user']) %}
+                                    {% set readonly = '' %}
+                                {% else %}
+                                    {% set readonly = 'readonly' %}
+                                {% endif %}
+                                    <!--div class="input-group">
+                                        <input type="text" class="form-control" id="column_{{ column_uuid }}" aria-describedby="" placeholder="" value="{{ student_data.get_data(column_uuid=current_column.config.uuid, preloaded_column=current_column)['data'] }}">
+                                        <div class="input-group-append">
+                                            <button type="button" class="btn btn-primary"><span class="fa fa-save"></span> Save</button>
+                                        </div>
+                                    </div-->
+                                {{ add_value_modules.add_value_module(table=table, column=current_column,
+                                    student_identifier=vars.identifier, unique_string=vars.unique_string,
+                                    callback_function_name='sendData',
+                                    show_simple_editor_override=show_simple_editor_override,
+                                    auth_user=vars.auth_user, data_to_display=student_data.get_data(column_uuid=current_column.config.uuid, preloaded_column=current_column)['data'], 
+                                    mode='single', readonly=readonly, load_script=True, do_not_trigger=True
+                                ) }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    {% elif vars.mode == 'view' and not vars.identifier_found %}
+        <div class="alert alert-danger mt-3">
+            Person with identifier {{ vars.identifier }} cannot be found.
+        </div>
+    {% endif %}
+    
+    {# identify student card #}
+    <div class="card mb-3 mt-3" id="find_student_container">
+        <div class="card-header sres-add-value-container-header" id="find_student_container_header" data-toggle="collapse" data-target="#find_student_container_collapse" aria-expanded="true" aria-controls="collapseOne">
+            <span class="fa fa-search"></span> Find a student
+        </div>
+        <div id="find_student_container_collapse" class="collapse show" aria-labelledby="find_student_container_header">
+            <div class="card-body">
+                <div class="form-group">
+                    <a href="{{ vars.scan_url|safe }}" class="btn btn-outline-primary btn-block" role="button"><span class="fa fa-qrcode"></span> Scan student</a>
+                </div>
+                <div class="form-group">
+                    <input type="text" class="form-control" id="search_student_term" 
+                        placeholder="Search" autocomplete="off"
+                        data-sres-search-endpoint="{{ url_for('table.search_students_by_term', table_uuid=table.config.uuid) }}"
+                        data-sres-column-root-url="{{ url_for('entry.view_single_student', table_uuid=table.config.uuid, mode='view', identifier='__identifier__') }}">
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <br>
+    
+{% endblock %}

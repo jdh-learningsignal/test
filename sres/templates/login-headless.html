@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+
+{% block title %}
+    {{ vars.title }}
+{% endblock %}
+
+{% block head_js2 %}
+    {% if vars.propagate_csrf_token_to_opener %}
+        <script>
+            $(document).ready(function(){
+                window.opener.ENV.CSRF_TOKEN = ENV.CSRF_TOKEN;
+            });
+        </script>
+    {% endif %}
+{% endblock %}
+
+{% block body %}
+    
+    <div class="row">
+        <div class="col">
+            <br>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+        </div>
+    </div>
+    
+    {% if vars.show_close_button %}
+        <div class="row mt-2">
+            <div class="col">
+                <button type="button" class="btn btn-primary" onclick="window.close();">Close tab</button>
+            </div>
+        </div>
+    {% endif %}
+    
+{% endblock %}

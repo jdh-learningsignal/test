@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+
+{% block title %}
+    View ID
+{% endblock %}
+
+{% block head_css1 %}
+    <style>
+        #qrcode img {
+            display: inline !important;
+        }
+    </style>
+{% endblock %}
+
+{% block head_js1 %}
+    <script src="{{ url_for('static', filename='js/JsBarcode.all.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/qrcode.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.id-view.js') }}"></script>
+    <script>
+        $(document).ready(function(){
+            if ('{{ vars.identifier }}') {
+                // QR
+                new QRCode('qrcode', {
+                    text: '{{ vars.identifier }}',
+                    width: 200,
+                    height: 200,
+                    colorDark : "#000000",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.H
+                });
+                // barcode
+                JsBarcode("#barcode", "{{ vars.identifier }}", {
+                    format: "CODE128",
+                    lineColor: "#000",
+                    width: 2,
+                    height: 40,
+                    displayValue: false
+                });
+            }
+        });
+    </script>
+{% endblock %}
+
+{% block nav %}
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    {% if vars.identifier %}
+        <div class="row">
+            <div class="col text-center mt-3">
+                <h3 class="text-muted">{{ vars.preferred_name }} {{ vars.surname }}</h3>
+                <div id="qrcode" class="m-4"></div>
+                <svg id="barcode" class="m-4"></svg>
+            </div>
+        </div>
+    {% endif %}
+    
+    {% if vars.mode == 'staff' %}
+        <div class="row">
+            <div class="col mt-3">
+                <h3>
+                    Code access
+                    <a href=".sres-code-access-container" data-toggle="collapse" aria-expanded="{% if vars.identifier %}false{% else %}true{% endif %}"><span class="fa fa-angle-down sres-collapse-caret"></span></a>
+                </h3>
+                <div class="sres-code-access-container collapse {% if vars.identifier %}{% else %}show{% endif %}">
+                    <p>Provide the following URL to students. They will be asked to log in to access their ID codes.</p>
+                    <input type="text" class="form-control" value="{{ url_for('table.get_my_id', table_uuid=table.config.uuid, _external=true) }}" readonly>
+                    <p class="mt-4">Enter a student identifier to view their ID code.</p>
+                    <form method="GET" class="form-horizontal">
+                        <input type="text" name="identifier" class="form-control">
+                        <input type="submit" value="Go" class="btn btn-primary mt-2">
+                    </form>
+                </div>
+            </div>
+        </div>
+    {% endif %}
+    
+    
+{% endblock %}

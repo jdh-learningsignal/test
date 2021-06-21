@@ -1,0 +1,274 @@
+{% extends 'base.html' %}
+
+{% block head_css1 %}
+    {% if vars.required_libraries and 'datatables' in vars.required_libraries %}
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/dataTables.bootstrap4.min.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/fixedColumns.bootstrap4.min.css') }}">
+    {% endif %}
+    {% if vars.required_libraries and 'datatables.buttons' in vars.required_libraries %}
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/buttons.bootstrap4.min.css') }}">
+    {% endif %}
+    {% if vars.required_libraries and 'sres.multiple-reports-table' in vars.required_libraries %}
+        <style>
+            {
+                max-width: 30vw;
+                min-width: 20vw;
+                max-height: 40vh;
+                overflow-y: auto;
+                /*white-space: normal !important;*/
+            }
+        </style>
+    {% endif %}
+    {% if vars.previewing %}
+        <style>
+            /* used for identifier searcher */
+            .sres-preview-identifier-search .algolia-autocomplete {
+                width: 70%;
+            }
+        </style>
+    {% endif %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chosen.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/vmsg.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap-select.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/ion.rangeSlider.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sres.algolia-autocomplete.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sres.base-add-value.css') }}">
+    <style>
+        .sres-add-value-container-header {
+            padding: 0.3rem 0.6rem !important;
+        }
+        .sres-sketch-container {
+            //padding-top: 0.5em;
+        }
+        .sres-sketch-area {
+            border: 1px solid #999;
+        }
+        .algolia-autocomplete {
+            width: 100%;
+        }
+    </style>
+{% endblock %}
+
+{% block head_js1 %}
+    <script>
+        ENV['auth_user'] = '{{ vars.auth_user }}';
+        ENV['ping_url'] = '{{ url_for("static", filename="js/sres.ping.js", _external=True) }}';
+        ENV['base_url'] = '{{ request.base_url }}';
+        ENV['GET_FILE_ENDPOINT'] = '{{ url_for("file.get_file", filename="__filename__", _external=True) }}';
+        {% if table.config.uuid %}
+            ENV['table_uuid'] = '{{ table.config.uuid }}';
+            {% if vars.sdak %}
+                ENV['set_data_endpoint'] = '{{ url_for("table.set_data", table_uuid=table.config.uuid, column_uuid=column.config.uuid, identifier=vars.identifier, sdak=vars.sdak, sda_mode=vars.sda_mode)|safe }}';
+                ENV['SEND_RICH_DATA_ENDPOINT'] = '{{ url_for("table.set_rich_data", table_uuid=table.config.uuid, column_uuid=column.config.uuid, identifier=vars.identifier, sdak=vars.sdak, sda_mode=vars.sda_mode)|safe }}';
+                ENV['GET_QUICK_INFO_ENDPOINT'] = '{{ url_for("entry.get_quick_info", table_uuid=table.config.uuid, column_uuid=column.config.uuid, identifier="__identifier__", wait="__wait__", mode="__mode__", sdak=vars.sdak)|safe }}';
+            {% else %}
+                ENV['set_data_endpoint'] = '{{ url_for("table.set_data", table_uuid=table.config.uuid, column_uuid=column.config.uuid, identifier=vars.identifier)|safe }}';
+                ENV['SEND_RICH_DATA_ENDPOINT'] = '{{ url_for("table.set_rich_data", table_uuid=table.config.uuid, column_uuid=column.config.uuid, identifier=vars.identifier)|safe }}';
+                ENV['GET_QUICK_INFO_ENDPOINT'] = '{{ url_for("entry.get_quick_info", table_uuid=table.config.uuid, column_uuid=column.config.uuid, identifier="__identifier__", wait="__wait__", mode="__mode__")|safe }}';
+            {% endif %}
+        {% endif %}
+        {% if column.config.uuid %}
+            ENV['column_uuid'] = '{{ column.config.uuid }}';
+            ENV['column_type'] = '{{ column.config.type }}';
+            ENV['rangeslider_config'] = {{ vars.rangeslider_config|tojson }};
+            ENV['GET_DATA_ENDPOINT'] = '{{ url_for("table.get_data", table_uuid=table.config.uuid, column_uuid=column.config.uuid, identifier=vars.identifier, sdak=vars.sdak, sda_mode=vars.sda_mode, report_index="__report_index__")|safe }}';
+        {% endif %}
+    </script>
+    {% raw %}
+        <script id="search_student_result_line_template" type="text/x-handlebars-template">
+            <span data-identifier="{{sid}}" class="{{spanClass}}">
+                <strong>{{displayName}}</strong>
+                {{sid}}
+                {{#if inactive}}[inactive]{{/if}}
+            </span>
+        </script>
+    {% endraw %}
+    {% if vars.required_libraries and 'datatables' in vars.required_libraries %}
+        <script src="{{ url_for('static', filename='js/jquery.dataTables.min.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/dataTables.bootstrap4.min.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/dataTables.fixedColumns.min.js') }}"></script>
+    {% endif %}
+    {% if vars.required_libraries and 'datatables.buttons' in vars.required_libraries %}
+        <script src="{{ url_for('static', filename='js/dataTables.buttons.min.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/buttons.bootstrap4.min.js') }}"></script>
+    {% endif %}
+    {% if vars.required_libraries and 'datatables.buttons.print' in vars.required_libraries %}
+        <script src="{{ url_for('static', filename='js/buttons.print.min.js') }}"></script>
+    {% endif %}
+    {% if vars.required_libraries and 'datatables.buttons.excelHtml5' in vars.required_libraries %}
+        <script src="{{ url_for('static', filename='js/jszip.min.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/buttons.html5.min.js') }}"></script>
+    {% endif %}
+    <script src="{{ url_for('static', filename='js/tinymce/tinymce.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tinymce/jquery.tinymce.min.js') }}"></script>
+    {% if vars.user_is_table_admin %}
+        <script src="{{ url_for('static', filename='js/sres.anonymiser-toggle.js') }}"></script>
+        <script>
+            ENV['ANONYMISER_TOGGLE_ENDPOINT'] = '{{ url_for("index.toggle_anonymiser") }}';
+        </script>
+    {% endif %}
+    {% if vars.previewing %}
+        <script src="{{ url_for('static', filename='js/ajaxq.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/sres.add-value-preview.js') }}"></script>
+        {#% raw %}
+            <script id="search_student_result_line_template" type="text/x-handlebars-template">
+                <span data-sres-identifier="{{sid}}">
+                    <strong>{{displayName}}</strong>
+                    {{sid}}
+                </span>
+            </script>
+        {% endraw %#}
+        <script>
+            ENV['COLUMN_SDA_PREVIEW_ENDPOINT_IDENTIFIED'] = '' // this needs to be overridden
+            ENV['COLUMN_SDA_PREVIEW_ENDPOINT_RANDOM'] = '' // this needs to be overridden
+            ENV['GET_STUDENTS_ENDPOINT'] = "{{ url_for('table.get_students_by_term', table_uuid=table.config.uuid) }}";
+        </script>
+    {% endif %}
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/bs-custom-file-input.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/localforage.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/chosen.jquery.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/capture_image.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/bootstrap-select.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ion.rangeSlider.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.rangeslider.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/autocomplete.jquery.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sketchable.utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jsketch.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sketchable.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.sketch.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.record-audio.js') }}" type="module"></script>
+    <script src="{{ url_for('static', filename='js/sres.offline.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.add-value.accordion-sets.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.add-value-shared.js', rand=range(1000,9999)|random|string) }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.add-value-base.js', rand=range(1000,9999)|random|string) }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.multientry.js') }}"></script>
+{% endblock %}
+
+{% block nav %}
+    {% if vars.previewing %}
+        <div class="row bg-primary text-white m-0 p-2">
+            <div class="col form-inline">
+                <span class="mr-2">
+                    You are currently previewing how a student would see this column when they are accessing it.
+                    When students view this through the 'student direct access' method, they will not see this blue bar.
+                    <a href="{{ url_for('table.edit_column', table_uuid=table.config.uuid, column_uuid=column.config.uuid) }}" class="text-white">
+                        <span class="fa fa-pen" aria-hidden="true"></span> Edit column
+                    </a>
+                </span>
+            </div>
+            <div class="col float-right align-self-center">
+                <div class="text-dark input-group justify-content-end sres-preview-identifier-search">
+                    <input type="text" placeholder="Student identifier" id="preview_identifier" class="form-control" value="{{ vars.identifier|anonymise_id_ifneedbe }}" aria-label="Enter a student identifier to preview" />
+                    <button type="button" class="btn btn-outline-light ml-1" id="preview_identified_student" aria-label="View entered student" data-tippy-content="View entered student">
+                        <span class="fa fa-eye" aria-hidden="true"></span>
+                    </button>
+                    <button type="button" class="btn btn-outline-light ml-1" id="preview_random_student" aria-label="Preview random student" data-tippy-content="Preview random student">
+                        <span class="fa fa-random" aria-hidden="true"></span>
+                    </button>
+                    <button class="btn btn-outline-light ml-1 sres-anonymiser-toggle" data-sres-identity-anonymiser-active="{{ session.get('identity_anonymiser_active', false) }}">
+                        <span class="fa fa-user-secret" aria-hidden="true"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% if vars.previewing_sda_allowed %}
+            <div class="row bg-primary text-white m-0 p-2">
+                <div class="col">
+                    <span class="fa fa-check-circle"></span>
+                    <span>This student, <strong>{{ vars.identifier|anonymise_id_ifneedbe }}</strong>, is currently allowed access to the below.</span>
+                </div>
+            </div>
+        {% else %}
+            <div class="row bg-danger text-white m-0 p-2">
+                <div class="col">
+                    <span class="fa fa-info-circle"></span>
+                    <span>This student, <strong>{{ vars.identifier|anonymise_id_ifneedbe }}</strong>, is not currently allowed access.</span>
+                    {% if not column.is_active() %}
+                        <span>The column's active dates do not include today.</span>
+                    {% endif %}
+                    {% if not column.is_student_editable() %}
+                        <span>The column is not configured to be editable by students.</span>
+                    {% endif %}
+                    {% if not column.is_student_direct_access_allowed() %}
+                        <span>The column is not configured to allow students direct access to it.</span>
+                    {% endif %}
+                    <span>You can see the below because you are an administrator of this list.</span>
+                </div>
+            </div>
+        {% endif %}
+    {% endif %}
+    <nav class="navbar navbar-dark bg-dark navbar-expand-lg {% if vars.hide_navbar %}d-none{% endif %}">
+        <span class="navbar-brand">{{ vars.entry_page_navbar_brand_text or 'Enter data' }}</span>
+        <span class="navbar-text text-danger sres-offline-nav-notification-active d-none">
+            <span class="nav-text text-danger">Offline mode active</span>
+        </span>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav mr-auto">
+                {% if not vars.sdak %}
+                    {% if table.config.uuid %}
+                        <li class="dropdown nav-item sres-nav-data-entry-mode-selector">
+                            <a href="#" class="nav-link dropdown-toggle" data-toggle="dropdown">
+                                <span class="fa fa-pen"></span>
+                            </a>
+                            <div class="dropdown-menu">
+                                <h6 class="dropdown-header">Switch data entry mode</h6>
+                                {% if request.endpoint != 'entry.add_value' %}
+                                    <a class="dropdown-item" href="{{ url_for('entry.add_value', table_uuid=table.config.uuid, column_uuid=column.config.uuid) }}">
+                                        <span class="fa fa-angle-right"></span> Single entry mode
+                                    </a>
+                                {% endif %}
+                                {% if request.endpoint != 'entry.add_value_bulk' %}
+                                    <a class="dropdown-item" href="{{ url_for('entry.add_value_bulk', table_uuid=table.config.uuid, column_uuid=column.config.uuid) }}">
+                                        <span class="fa fa-angle-double-right"></span> Bulk entry mode
+                                    </a>
+                                {% endif %}
+                                {% if request.endpoint != 'entry.add_value_roll' %}
+                                    <a class="dropdown-item" href="{{ url_for('entry.add_value_roll', table_uuid=table.config.uuid, column_uuid=column.config.uuid) }}">
+                                        <span class="fa fa-th-list"></span> Roll view mode
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </li>
+                    {% endif %}
+                {% endif %}
+                {% if request.endpoint == 'entry.add_value_roll' or request.endpoint == 'entry.add_value' or request.endpoint == 'entry.offline_home' %}
+                    <li class="dropdown sres-offline-nav-toggle-dropdown nav-item">
+                        <a href="#" class="nav-link dropdown-toggle" data-toggle="dropdown">
+                            <span class="fa fa-bolt" title="Offline mode"></span>
+                        </a>
+                        <div class="dropdown-menu">
+                            <h6 class="dropdown-header">Offline mode</h6>
+                            <a href="{{ url_for('entry.offline_home') }}" class="dropdown-item"><span class="fa fa-house-damage" title="Offline mode"></span> Offline home</a>
+                            <div class="divider"></div>
+                            <a href="javascript:void(0);" class="sres-offline-nav-toggle sres-offline-nav-toggle-godown dropdown-item">
+                                <span class="fa fa-bolt" aria-hidden="true"></span> Activate offline mode
+                            </a>
+                            <a href="javascript:void(0);" class="d-none sres-offline-nav-toggle sres-offline-nav-toggle-goup dropdown-item">
+                                <span class="fa fa-bolt text-danger" aria-hidden="true"></span> Go online
+                            </a>
+                        </div>
+                    </li>
+                {% endif %}
+            </ul>
+            <ul class="navbar-nav ml-auto">
+                {% if not vars.sdak %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('index.index') }}" title="Home"><span class="fa fa-home"></span></a>
+                    </li>
+                {% endif %}
+                {% if vars.user_is_table_admin %}
+                    <li>
+                        <a href="#" class="nav-link sres-anonymiser-toggle" data-sres-identity-anonymiser-active="{{ session.get('identity_anonymiser_active', false) }}"><span class="fa fa-user-secret" aria-hidden="true"></span></a>
+                    </li>
+                {% endif %}
+                <li class="nav-item">
+                    <a class="nav-link" href="{{ url_for('login.logout') }}" title="Log out {{ vars.auth_user }}"><span class="fa fa-sign-out-alt"></span></a>
+                </li>
+            </ul>
+        </div>
+    </nav>    
+{% endblock %}

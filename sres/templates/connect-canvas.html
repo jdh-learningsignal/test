@@ -1,0 +1,244 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+    Connect Canvas to {{ table.config.code }}
+{% endblock %}
+
+{% block head_css2 %}
+    <style>
+        .sres-refresh-now button:disabled {
+            cursor: not-allowed;
+        }
+    </style>
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/sres.connect-canvas.js') }}"></script>
+    <script>
+        ENV['FORCE_REFRESH_ENDPOINT'] = "{{ url_for('table.connect_lms_refresh', table_uuid=table.config.uuid, lms='canvas', connection_type='__connection_type__')|safe }}";
+    </script>
+{% endblock %}
+
+{% block body %}
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <main>
+    
+    <h1>Connect Canvas to {{ table.get_full_name() }}</h1>
+    
+    <!--div class="alert alert-danger">
+        <span class="fa fa-user-ninja" aria-hidden="true"></span>
+        This feature is experimental and is for testing only.
+        Using this, you authorise the SRES to use the provided credentials to access relevant data and indemnify the SRES and its creators of any liability.
+    </div-->
+    
+    <div class="alert alert-info">
+        <span class="fa fa-exclamation-triangle" aria-hidden="true"></span>
+        These are one-way imports from Canvas to SRES.
+    </div>
+    
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div class="row">
+            <div class="col">
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">
+                        Authorisation
+                        <a href="#authorisation_container" data-toggle="collapse" aria-expanded="{% if vars.auth_token %}false{% else %}true{% endif %}" aria-label="Show/hide authorisation"><span class="fa fa-angle-down sres-collapse-caret"></span></a>
+                    </label>
+                    <div class="col-sm-10 collapse {% if not vars.auth_token or vars.token_error %}show{% endif %}" id="authorisation_container">
+                        {% if vars.auth_token and not vars.token_error %}
+                            <div class="alert alert-info">
+                                <span class="fa fa-check"></span> You have already authorised the SRES to connect to Canvas.
+                            </div>
+                        {% else %}
+                            <div class="alert alert-warning">
+                                <span class="fa fa-times"></span> SRES has not yet been properly authorised to connect to Canvas.
+                            </div>
+                        {% endif %}
+                        {% if vars.token_error and vars.auth_token %}
+                            <div class="alert alert-danger">
+                                <span class="fa fa-times"></span> There appears to be an issue with authorisation to Canvas. Please check your token or connection. It may have expired, or be incomplete.
+                            </div>
+                        {% endif %}
+                        {% if 'oauth2' in canvas_connector.config.methods %}
+                            <div class="mb-2">
+                                <a href="{{ canvas_connector.get_oauth2_login_url(table.config.uuid) }}" class="btn btn-primary" role="button">Authorise SRES to connect to Canvas</a>
+                            </div>
+                        {% endif %}
+                        {% if 'token' in canvas_connector.config.methods %}
+                            <div class="form-group mb-2">
+                                <label for="auth_token" class="sres-form-label">API access token</label>
+                                {% if vars.auth_token %}
+                                    <span>Paste authorisation token to replace token ending in ***{{ vars.auth_token[-8:] }}</span>
+                                {% else %}
+                                    <span>Paste authorisation token here</span>
+                                {% endif %}
+                                <input type="text" class="form-control" name="auth_token" id="auth_token" placeholder="" autocomplete="off">
+                                <span>
+                                    <span class="fa fa-question-circle"></span>
+                                    <a href="https://community.canvaslms.com/docs/DOC-10806" target="_blank"> How do I obtain an API access token?</a>
+                                </span>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                {% if vars.auth_token and not vars.token_error %}
+                
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Select source Canvas course(s)</label>
+                    <div class="col-sm-10">
+                        <select name="select_canvas_course_ids" id="select_canvas_course_ids" multiple data-placeholder="Select course(s)">
+                            {% for course in vars.course_chooser %}
+                                <option value="{{ course.id }}" {% if course.id in vars.connected_course_ids %}selected{% endif %}>[{{ course.id }}] {{ course.course_code }} {{ course.name }}</option>
+                            {% endfor %}
+                        </select>
+                        {% if vars.concluded_courses_ids %}
+                            <div class="mt-2 pb-0 alert alert-info">
+                                <span class="fa fa-exclamation-triangle"></span>
+                                The following courses have concluded.
+                                <ul>
+                                    {% for course in vars.course_chooser if course.id in vars.concluded_courses_ids %}
+                                        <li>{{ course.course_code }} {{ course.name }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endif %}
+                        {% if vars.concluded_courses_ids|length == vars.connected_course_ids|length and vars.concluded_courses_ids|length > 0 %}
+                            <div class="alert alert-danger">
+                                <span class="fa fa-exclamation-triangle"></span>
+                                Because all of the selected courses have concluded, the syncs will be automatically disabled when they are next run.
+                                You can still request a once-off sync by enabling a connection.
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Choose data to sync</label>
+                    <div class="col-sm-10">
+                        {% if vars['connected_course_ids'] or vars.is_user_superadministrator %}
+                            <input type="text" class="form-control mb-3" placeholder="Search for a connection..." id="connection_filter" aria-label="Search for a connection type">
+                            <div class="row">
+                                {% for con_id, con in vars.CONNECTION_META.items() %}
+                                    {% if con.admin_only and not vars.is_user_superadministrator and not canvas_connector.connections[con_id]['enabled'] %}
+                                        {# pass #}
+                                    {% elif con.requires_course_connection and not vars['connected_course_ids'] %}
+                                        {# pass #}
+                                    {% else %}
+                                        <div class="col-sm-12 col-lg-6 py-2 sres-card-container">
+                                            <div class="card h-100 bg-light mb-3 sres-connection-configuration-card">
+                                                <div class="card-header">
+                                                    <input id="{{ con.form_element }}" name="{{ con.form_element }}" type="checkbox" class="ml-0"
+                                                        {% if canvas_connector.connections[con_id]['enabled'] %}checked{% endif %}
+                                                        data-toggle="toggle" data-off="<span class='fa fa-times'></span>" data-on="<span class='fa fa-check'></span>"
+                                                        {% if con.admin_only and not vars.is_user_superadministrator %}disabled{% endif %}
+                                                        aria-label="Toggle {{ con.display }} connection">
+                                                    {{ con.display }}
+                                                    {% if con.admin_only %}
+                                                        <span class="badge badge-warning">Superadmin only</span>
+                                                    {% endif %}
+                                                </div>
+                                                <div class="card-body">
+                                                    <div class="mb-2">
+                                                        <span class="sres-form-label">{{ con.label|safe }}</span>
+                                                        <span>{{ con.description|safe }}</span>
+                                                    </div>
+                                                    {% if con.custom_config_card %}
+                                                        {# todo #}
+                                                    {% else %}
+                                                        {% if con.additional_form_elements %}
+                                                            {% for form_element in con.additional_form_elements %}
+                                                                <div class="form-horizontal mb-2">
+                                                                    <label class="sres-form-label" for="{{ con.form_element }}_{{ form_element.name }}">{{ form_element.label|safe }}</label>
+                                                                    <span class="text-muted">{{ form_element.hint|safe }}</span>
+                                                                    {% if form_element.type == 'select' %}
+                                                                        <select name="{{ con.form_element }}_{{ form_element.name }}" id="{{ con.form_element }}_{{ form_element.name }}" class="ml-2 form-control">
+                                                                            {% for option in form_element.options %}
+                                                                                <option value="{{ option.value }}" {% if canvas_connector.connections[con_id][form_element.key] == option.value %}selected{% endif %}>
+                                                                                    {{ option.display }}
+                                                                                </option>
+                                                                            {% endfor %}
+                                                                        </select>
+                                                                    {% elif form_element.type == 'assignment_chooser' or form_element.type == 'gradebook_chooser' %}
+                                                                        <select name="{{ con.form_element }}_{{ form_element.name }}" id="{{ con.form_element }}_{{ form_element.name }}" class="sres-select-assignments" multiple data-placeholder="Select assignment(s)">
+                                                                            {% for canvas_assignment_id, canvas_assignment in vars.assignment_chooser.items() %}
+                                                                                <option value="{{ canvas_assignment_id }}" {% if canvas_assignment_id in canvas_connector.connections[con_id][form_element.key] %}selected{% endif %}>
+                                                                                    [{{ canvas_assignment.course_id }}] {{ canvas_assignment.name }}
+                                                                                </option>
+                                                                            {% endfor %}
+                                                                        </select>
+                                                                    {% elif form_element.type == 'quiz_chooser' %}
+                                                                        <select name="{{ con.form_element }}_{{ form_element.name }}" id="{{ con.form_element }}_{{ form_element.name }}" class="sres-select-quizzes" multiple data-placeholder="Select quiz(zes)">
+                                                                            {% for canvas_quiz_id, canvas_quiz in vars.quiz_chooser.items() %}
+                                                                                <option value="{{ canvas_quiz_id }}" {% if canvas_quiz_id in canvas_connector.connections[con_id][form_element.key] %}selected{% endif %}>
+                                                                                    [{{ canvas_quiz.course_id }}] {{ canvas_quiz.title }}
+                                                                                </option>
+                                                                            {% endfor %}
+                                                                        </select>
+                                                                    {% endif %}
+                                                                </div>
+                                                            {% endfor %}
+                                                        {% endif %}
+                                                    {% endif %}
+                                                </div>
+                                                <div class="card-footer text-muted">
+                                                    <span class="sres-refresh-now">
+                                                        <button type="button" class="btn btn-sm btn-outline-primary" data-sres-connection-type="{{ con_id }}" {% if not canvas_connector.connections[con_id]['enabled'] %}disabled{% endif %}>
+                                                            <span class="fa fa-sync-alt sres-refresh-now-spinner"></span>
+                                                            Sync data now
+                                                        </button>
+                                                    </span>
+                                                    <span class="sres-refresh-now-warning {% if canvas_connector.connections[con_id]['enabled'] %}d-none{% endif %}">
+                                                        {% if canvas_connector.connections[con_id]['enabled'] %}
+                                                            <a href="#" class="sres-action-buttons-jump">Save</a>
+                                                        {% else %}
+                                                            Enable and <a href="#" class="sres-action-buttons-jump">save</a>
+                                                        {% endif %} 
+                                                        connections first.
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <div>
+                                Please select at least one course above and then press Save for sync options to appear.
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                {% endif %}
+                
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Save and update</label>
+                    <div class="col-sm-10">
+                        <a name="action_buttons">
+                        <button type="submit" name="submit_action" value="update" class="btn btn-primary" id="update_connection">Save</button>
+                        <input type="hidden" name="workflow_stage" value="{% if not vars.auth_token %}set_token{% endif %}">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+    
+    </main>
+    
+{% endblock %}

@@ -1,0 +1,12 @@
+
+sres/translations/en/LC_MESSAGES/messages.mo
+sres/translations/en/LC_MESSAGES/messages.po
+config.py
+instance/
+sres.egg-info/
+sres.log
+sres/__pycache__/
+sres/blueprints/__pycache__/
+sres/tests/__pycache__/
+sres_data.log
+wsgi/

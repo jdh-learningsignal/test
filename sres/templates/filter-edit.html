@@ -1,0 +1,600 @@
+{% extends 'base-staff.html' %}
+
+{% import 'collective-share.html' as collective_share %}
+
+{% block title %}
+    {% if vars.collective_sharing %}
+        {{ collective_share.show_title(vars.collective_sharing_mode, 'filter', vars.collective_sharing_asset.config.name) }}
+    {% else %}
+        {% if vars.mode == 'new' %}New filter{% elif vars.mode == 'edit' %}Edit filter - {{ filter.config.name }}{% endif %}
+    {% endif %}
+{% endblock %}
+
+{% block head_css2 %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/query-builder.default.css') }}">
+    <style>
+        #conditions_advanced_expression, #conditions_advanced_expression_friendly {
+            padding: 0.5rem;
+        }
+        .sres-multientry-label {
+            padding: 0.5rem;
+        }
+        .sres-tinymce-editor {
+            padding: 0.5rem;
+        }
+        .rule-filter-container {
+            width: 100%;
+        }
+        .rule-operator-container {
+            width: 25%;
+        }
+        .sres-intersection-hover-controls {
+            position: absolute;
+            margin-top: -2rem;
+            padding-right: 2rem;
+            width: 100%;
+            text-align: right;
+        }
+        .sres-section-parent {
+            border-left: 1px solid #007bff;
+            border-top: 1px solid #007bff;
+            padding-left: 1rem;
+            padding-top: 0.5rem;
+        }
+    </style>
+    <style>
+        .algolia-autocomplete {
+            width: 100%;
+        }
+        .algolia-autocomplete .aa-input, .algolia-autocomplete .aa-hint {
+            width: 100%;
+        }
+        .algolia-autocomplete .aa-hint {
+            color: #999;
+        }
+        .algolia-autocomplete .aa-dropdown-menu {
+        width: 100%;
+        background-color: #fff;
+        border: 1px solid #999;
+        border-top: none;
+        }
+        .algolia-autocomplete .aa-dropdown-menu .aa-suggestion {
+        cursor: pointer;
+        padding: 5px 4px;
+        }
+        .algolia-autocomplete .aa-dropdown-menu .aa-suggestion.aa-cursor {
+        background-color: #B2D7FF;
+        }
+        .algolia-autocomplete .aa-dropdown-menu .aa-suggestion em {
+        font-weight: bold;
+        font-style: normal;
+        }
+    </style>
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/jquery-ui.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/autocomplete.jquery.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tinymce/tinymce.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tinymce/jquery.tinymce.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ajaxq.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    <script>
+        ENV['EDIT_MODE'] = '{{ vars.mode }}';
+        ENV['CHECK_ADVANCED_EXPRESSION_ENDPOINT'] = "{{ url_for('filter.check_advanced_expression') }}";
+        ENV['ENUMERATE_OPERAND_SUGGESTIONS_ENDPOINT'] = "{{ url_for('column.enumerate_operand_suggestions') }}";
+        ENV['filter_disabled'] = '{{ vars.filter_disabled }}';
+        ENV['FILE_UPLOAD_ENDPOINT'] = "{{ url_for('file.upload_file') }}";
+        ENV['FONT_FORMATS'] = "{{ vars.FONT_FORMATS }}";
+        ENV['PREVIEW_CONDITIONS_ENDPOINT'] = "{{ url_for('filter.preview_conditions') }}";
+        ENV['allow_conditions_preview'] = {% if vars.mode == 'new' %}false{% else %}true{% endif %};
+        ENV['RUN_PERSONALISED_MESSAGE_ENDPOINT'] = "{{ url_for('filter.run_filter_message', filter_uuid=filter.config.uuid, mode='__mode__')|safe }}";
+        var queryBuilderFilters = {{ vars.query_builder_filters|tojson }};
+        var queryBuilderRules = {{ vars.query_builder_rules|tojson }};
+        var existingEmailSections = {{ filter.config.email.sections|tojson }};
+        $(document).ready(function(){
+            listChooserUpdateSelection({{ vars.referenced_table_uuids|tojson }});
+            {% if vars.mode == 'new' %}
+                $('#list_chooser_button_do').trigger('click');
+            {% endif %}
+        });
+    </script>
+    <script src="{{ url_for('static', filename='js/query-builder.standalone.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.query-builder-base.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.column_rereferencer.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.filter-shared.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.filter-edit.js') }}"></script>
+    {% if vars.filter_disabled %}
+        <script>
+            $(document).ready(function(){
+                $('.sres-querybuilder-container button').prop('disabled', true);
+                $('.sres-querybuilder-container input').prop('disabled', true);
+                $('.sres-querybuilder-container select').prop('disabled', true).trigger('chosen:updated');
+            });
+        </script>
+    {% endif %}
+{% endblock %}
+
+{% block body %}
+    
+    {% import 'select-users.html' as select_users %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <main>
+    
+    <div class="row">
+        <div class="col">
+            <h1>
+                {% if vars.collective_sharing %}
+                    {{ collective_share.show_title(vars.collective_sharing_mode, 'filter', vars.collective_sharing_asset.config.name) }}
+                {% else %}
+                    {% if vars.mode == 'new' %}
+                        Create new filter
+                    {% elif vars.mode == 'edit' %}
+                        Edit filter - {{ filter.config.name }}
+                    {% endif %}
+                {% endif %}
+            </h1>
+        </div>
+    </div>
+    {% if vars.filter_disabled %}
+        <div class="row">
+            <div class="col-sm-12">
+                <div class="alert alert-danger">
+                    <span class="fa fa-lock"></span>
+                    This filter has been locked for editing because it has been run already.
+                    <a href="{{ url_for('filter.view_logs', filter_uuid=filter.config.uuid) }}" class="btn btn-outline-secondary" role="button">View filter send log.</a>  
+                    You can re-use or modify this filter by <a href="{{ url_for('filter.clone_filter', filter_uuid=filter.config.uuid) }}" class="btn btn-outline-secondary" role="button">cloning</a> it.
+                    You can still preview the results of this filter, but cannot use it to send messages.
+                </div>
+            </div>
+        </div>
+    {% endif %}
+    <div class="row">
+        <div class="col">
+            <form method="post" action="{{ url_for('filter.edit_filter', filter_uuid=filter.config.uuid, uih=request.args.get('uih')) }}" id="edit_filter_form" enctype="multipart/form-data" data-sres-role="main_form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                {% if vars.collective_sharing %}
+                    {{ collective_share.render_collective_metadata_fields(vars.collective_sharing_asset, select_users, vars.collective_sharing_mode, 'filter', vars) }}
+                {% endif %}
+                <div class="form-group row {% if vars.ui_hide.name %}d-none{% endif %}">
+                    <label class="col-sm-2 col-form-label sres-form-label" for="filter_name">Filter name</label>
+                    <div class="col-sm-10">
+                        <input type="text" name="filter_name" id="filter_name" value="{{ request.form.filter_name or filter.config.name }}" required class="form-control" {{ vars.filter_disabled }}>
+                    </div>
+                </div>
+                <div class="form-group row {% if vars.ui_hide.description %}d-none{% endif %}">
+                    <label class="col-sm-2 col-form-label sres-form-label" for="filter_description">Filter description</label>
+                    <div class="col-sm-10">
+                        <input type="text" name="filter_description" id="filter_description" value="{{ request.form.filter_description or filter.config.description }}" class="form-control" {{ vars.filter_disabled }}>
+                    </div>
+                </div>
+                <div class="form-group row {% if vars.ui_hide.administrators %}d-none{% endif %}">
+                    <label class="col-sm-2 col-form-label sres-form-label">Authorised administrators</label>
+                    <div class="col-sm-10">
+                        <div class="row">
+                            {{ select_users.select_user_fields(
+                                    id='administrator', 
+                                    usernames=request.form['authorised_administrators'] or filter.get_authorised_usernames(),
+                                    disable_inputs=true if vars.filter_disabled else false
+                                )
+                            }}
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row {% if vars.ui_hide.primary_conditions %}d-none{% endif %}">
+                    <label class="col-sm-2 col-form-label sres-form-label">Primary conditions</label>
+                    <div class="col-sm-10">
+                        <div class="mb-2 {% if vars.ui_hide.primary_conditions_selector %}d-none{% endif %}">
+                            <input type="checkbox" data-toggle="toggle" data-onstyle="warning" data-offstyle="primary"
+                                data-off="Conditions wizard" data-on="Advanced expression" data-size="small"
+                                name="conditions_use_advanced" id="conditions_use_advanced" data-width="200"
+                                {% if filter.config.advanced_conditions.enabled %}checked{% endif %}>
+                        </div>
+                        <div id="conditions_simple_container" class="collapse {% if not filter.config.advanced_conditions.enabled %}show{% endif %}">
+                            <button type="button" class="btn btn-sm btn-outline-secondary sres-list-chooser-show-chooser" {{ vars.filter_disabled }}>
+                                <span class="fa fa-table"></span> Choose list(s) from which to select column(s)
+                            </button>
+                            <div id="primary_conditions" class="sres-querybuilder-container"></div>
+                            <input type="hidden" name="rules_for_primary_conditions" id="rules_for_primary_conditions">
+                        </div>
+                        <div id="conditions_advanced_container" class="collapse {% if filter.config.advanced_conditions.enabled %}show{% endif %}">
+                            <div class="alert alert-info">
+                                Note that in this version of SRES, SQL commands can no longer be used.
+                                The expression below must be a standard mathematical and logical expression that evaluates to either true or false.
+                                Ultra-advanced users can refer to the <a href="https://github.com/ArashPartow/exprtk/blob/master/readme.txt" target="_blank">ExprTk documentation</a> for additional expressions.
+                                <a data-toggle="collapse" href="#conditions_advanced_expression_example" role="button">See some examples.</a>
+                            </div>
+                            <div class="alert alert-info collapse" id="conditions_advanced_expression_example">
+                                This expression evaluates to true for students whose, for example, COL_1 is 15 and COL_2 is 2.
+                                <pre>$COL_1$ - $COL_2$ > 10</pre>
+                                This expression evaluates to true for students whose, for example, COL_1 is 5 and COL_2 is 10.
+                                <pre>$COL_1$ == 2 or $COL_2$ == 10</pre>
+                                To evaluate non-numeric data, enclose the column reference in single quotes.
+                                For example, if COL_1 contains dates, this would work:
+                                <pre>'$COL_1$' > '2019-01-15 12:00:00'</pre>
+                            </div>
+                            {% if filter.config.legacy.advanced_conditions %}
+                                <div class="alert alert-info">
+                                    A legacy advanced conditions statement appears to exist. This needs to be modified before re-using.
+                                    <a href="#legacy_advanced_conditions_statement_container" data-toggle="collapse">Show legacy statement</a>
+                                    <div class="collapse" id="legacy_advanced_conditions_statement_container">
+                                        <pre>
+                                            {{ filter.config.legacy.conditions_clause }}
+                                        </pre>
+                                    </div>
+                                </div>
+                            {% endif %}
+                            <label for="conditions_advanced_expression">Expression</label>
+                            <div name="conditions_advanced_expression" id="conditions_advanced_expression" {{ vars.filter_disabled }}
+                                class="sres-tinymce-editor tinymce-code-only bg-white border rounded sres-column-rereferenceable sres-column-rereferenceable-text"
+                                {% if vars.filter_disabled %}sres-tinymce-disabled{% endif %}
+                                >{{ (request.form.conditions_advanced_expression or filter.config.advanced_conditions.expression)|safe_no_script }}</div>
+                            <label class="mt-2">Insert columns or operators into expression</label>
+                            <br />
+                            <button type="button" class="btn btn-light {% if not vars.filter_disabled %}sres-disable-upon-translate-column-references{% endif %}" id="conditions_advanced_expression_button_operator_plus" {{ vars.filter_disabled }}> + </button>
+                            <button type="button" class="btn btn-light {% if not vars.filter_disabled %}sres-disable-upon-translate-column-references{% endif %}" id="conditions_advanced_expression_button_operator_subtract" {{ vars.filter_disabled }}> - </button>
+                            <button type="button" class="btn btn-light {% if not vars.filter_disabled %}sres-disable-upon-translate-column-references{% endif %}" id="conditions_advanced_expression_button_operator_multiply" {{ vars.filter_disabled }}> * </button>
+                            <button type="button" class="btn btn-light {% if not vars.filter_disabled %}sres-disable-upon-translate-column-references{% endif %}" id="conditions_advanced_expression_button_operator_divide" {{ vars.filter_disabled }}> / </button>
+                            <button type="button" class="btn btn-light {% if not vars.filter_disabled %}sres-disable-upon-translate-column-references{% endif %}" id="conditions_advanced_expression_button_operator_parentheses" {{ vars.filter_disabled }}> (  ) </button>
+                            <button type="button" class="btn btn-light {% if not vars.filter_disabled %}sres-disable-upon-translate-column-references{% endif %}" id="conditions_advanced_expression_button_operator_and" {{ vars.filter_disabled }}> and </button>
+                            <button type="button" class="btn btn-light {% if not vars.filter_disabled %}sres-disable-upon-translate-column-references{% endif %}" id="conditions_advanced_expression_button_operator_or" {{ vars.filter_disabled }}> or </button>
+                            <button type="button" class="btn btn-light {% if not vars.filter_disabled %}sres-disable-upon-translate-column-references{% endif %}" id="conditions_advanced_expression_button_column" {{ vars.filter_disabled }}>Insert column</button>
+                            <button type="button" class="btn btn-light sres-translate-column-references float-right" data-sres-current-mode="design" data-sres-uuid="{{ filter.config.uuid }}">Show friendly column names</button>
+                            <button type="button" class="btn btn-light float-right mr-2" id="conditions_advanced_expression_button_validate">Check expression</button>
+                        </div>
+                        <div id="conditions_warning" class="d-none alert alert-danger">
+                            <span class="fa fa-exclamation-triangle"></span>
+                            <span id="conditions_warning_text"></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row {% if vars.ui_hide.contact_methods %}d-none{% endif %}">
+                    <label class="col-sm-2 col-form-label sres-form-label">Contact method(s)</label>
+                    <div class="col-sm-10">
+                        {% for k, v in filter.contact_methods.items() if v.enabled %}
+                            <input type="checkbox" data-toggle="toggle" data-size="small"
+                                data-off="{{ v.name }}" data-on="Send to {{ v.name }}" value={{ k }}
+                                name="contact_type_{{ k }}" data-sres-contact-type="{{ k }}" data-width="200"
+                                {% if k in filter.config.contact_type %}checked{% endif %} {{ vars.filter_disabled }}>
+                        {% endfor %}
+                        <div class="alert alert-info sres-contact-type-config sres-contact-type-canvasinbox mt-2">
+                            <span class="fa fa-exclamation-triangle"></span>
+                            Warning: Canvas inbox messages only support plain text. Please ensure you do <strong>not</strong> use any special formatting or rich media in your message.
+                            Message open tracking also does <strong>not</strong> work for Canvas inbox messages, but link tracking does work.
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row collapse {% if 'email' in filter.config.contact_type or 'canvasinbox' in filter.config.contact_type %}show{% endif %} sres-contact-type-configuration-container-message">
+                    <label class="col-sm-2 col-form-label sres-form-label">Message</label>
+                    <div class="col-sm-10">
+                        <div class="form-group {% if vars.ui_hide.sender_name %}d-none{% endif %} sres-contact-type-config sres-contact-type-email">
+                            <label class="sres-form-label" for="sender_name">Sender name</label>
+                            <div class="input-group">
+                                <input type="text" name="sender_name" id="sender_name" value="{{ (request.form.sender_name or filter.config.email.sender.name) }}" required data-sres-required-for="email" class="form-control sres-column-rereferenceable sres-column-rereferenceable-value" {{ vars.filter_disabled }}>
+                                <div class="input-group-append {% if vars.ui_hide.btn_insert_column_reference %}d-none{% endif %}">
+                                    <button type="button" class="btn btn-light sres-select-column-trigger" data-sres-insert-column-target="sender_name" {{ vars.filter_disabled }}>
+                                        <span class="fa fa-dollar-sign" aria-hidden="true"></span> Insert column reference
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group {% if vars.ui_hide.sender_email %}d-none{% endif %} sres-contact-type-config sres-contact-type-email">
+                            <label class="sres-form-label" for="sender_email">Sender email</label>
+                            <div class="input-group">
+                                <input type="text" name="sender_email" id="sender_email" value="{{ (request.form.sender_email or filter.config.email.sender.email) }}" required data-sres-required-for="email" class="form-control sres-column-rereferenceable sres-column-rereferenceable-value" {{ vars.filter_disabled }}>
+                                <div class="input-group-append {% if vars.ui_hide.btn_insert_column_reference %}d-none{% endif %}">
+                                    <button type="button" class="btn btn-light sres-select-column-trigger" data-sres-insert-column-target="sender_email" {{ vars.filter_disabled }}>
+                                        <span class="fa fa-dollar-sign" aria-hidden="true"></span> Insert column reference
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group {% if vars.ui_hide.email_advanced %}d-none{% endif %} sres-contact-type-config sres-contact-type-email">
+                            <a href="javascript:void(0);" data-toggle="collapse" data-target="#email_advanced">
+                                Advanced email details <span class="fa fa-angle-down"></span>
+                            </a>
+                            <span class="text-danger d-none" id="recipient_email_override_active_alert">
+                                <span class="fa fa-exclamation-triangle"></span>
+                                Recipient email override is active
+                            </span>
+                        </div>
+                        <div id="email_advanced" class="collapse {% if vars.ui_hide.email_advanced %}d-none{% endif %} sres-contact-type-config sres-contact-type-email">
+                            {% for address in [('reply_to', 'Reply to', 'One email address only'), ('cc', 'CC', 'Separate multiple addresses with commas, spaces, or semicolons'), ('bcc', 'BCC', 'Separate multiple addresses with commas, spaces, or semicolons')] %}
+                                <div class="form-group">
+                                    <label><span class="sres-form-label">{{ address[1] }} email</span> <span class="text-muted">{{ address[2] }}</span></label>
+                                    <div class="input-group">
+                                        <input type="text" name="{{ address[0] }}_email" id="{{ address[0] }}_email" value="{{ (request.form[address[0] + '_email'] or filter.config.email.addresses[address[0]]) }}" class="form-control sres-column-rereferenceable sres-column-rereferenceable-value" {{ vars.filter_disabled }}>
+                                        <div class="input-group-append {% if vars.ui_hide.btn_insert_column_reference %}d-none{% endif %}">
+                                            <button type="button" class="btn btn-light sres-select-column-trigger" data-sres-insert-column-target="{{ address[0] }}_email" {{ vars.filter_disabled }}>
+                                                <span class="fa fa-dollar-sign" aria-hidden="true"></span> Insert column reference
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                            <div class="form-group">
+                                <label>
+                                    <span class="sres-form-label">Recipient email(s)</span>
+                                    <span class="fa fa-exclamation-triangle" data-tippy-content="Only for advanced users"></span>
+                                    <span class="text-muted">
+                                        Leave empty to use each student's standard email address in SRES (default behaviour).
+                                        Alternatively you can specify different email addresses such as from other column(s).
+                                        Separate multiple addresses with commas, spaces, or semicolons.
+                                    </span>
+                                </label>
+                                <div class="input-group">
+                                    <input type="text" name="to_email" id="to_email" value="{{ (request.form['to_email'] or filter.config.email.addresses['to']) }}" class="form-control sres-column-rereferenceable sres-column-rereferenceable-value" {{ vars.filter_disabled }}>
+                                    <div class="input-group-append {% if vars.ui_hide.btn_insert_column_reference %}d-none{% endif %}">
+                                        <button type="button" class="btn btn-light sres-select-column-trigger" data-sres-insert-column-target="to_email" {{ vars.filter_disabled }}>
+                                            <span class="fa fa-dollar-sign" aria-hidden="true"></span> Insert column reference
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group sres-contact-type-config sres-contact-type-email sres-contact-type-canvasinbox">
+                            <label class="sres-form-label" for="email_subject">Subject</label>
+                            <div class="input-group">
+                                <input type="text" name="email_subject" id="email_subject" value="{{ (request.form.email_subject or filter.config.email.subject) }}" required data-sres-required-for="message" class="form-control sres-column-rereferenceable sres-column-rereferenceable-value" {{ vars.filter_disabled }}>
+                                <div class="input-group-append {% if vars.ui_hide.btn_insert_column_reference %}d-none{% endif %}">
+                                    <button type="button" class="btn btn-light sres-select-column-trigger" data-sres-insert-column-target="email_subject" {{ vars.filter_disabled }}>
+                                        <span class="fa fa-dollar-sign" aria-hidden="true"></span> Insert column reference
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group sres-contact-type-config sres-contact-type-email sres-contact-type-canvasinbox">
+                            <label class="sres-form-label">Message body first section</label>
+                            <div name="email_body_first" id="email_body_first" class="sres-tinymce-editor tinymce-basic border rounded sres-column-rereferenceable sres-column-rereferenceable-html">{{ (request.form.email_body_first or filter.config.email.body_first)|safe_no_script }}</div>
+                            <button type="button" class="btn btn-sm btn-light sres-select-column-trigger {% if vars.ui_hide.btn_insert_column_reference %}d-none{% endif %} {% if not vars.filter_disabled %}sres-disable-upon-translate-column-references{% endif %}" data-sres-insert-column-target="email_body_first" {{ vars.filter_disabled }}>
+                                <span class="fa fa-dollar-sign" aria-hidden="true"></span> Insert column reference
+                            </button>
+                            <button type="button" class="btn btn-sm btn-light sres-translate-column-references" data-sres-current-mode="design" data-sres-uuid="{{ filter.config.uuid }}">Show friendly column names</button>
+                            <button type="button" class="btn btn-sm btn-light sres-multi-column-magic-formatter-insert {% if vars.ui_hide.btn_mc_magic_formatter %}d-none{% endif %} {% if not vars.filter_disabled %}sres-disable-upon-translate-column-references{% endif %}" data-sres-insert-target="email_body_first" {{ vars.filter_disabled }}>
+                                <span class="fa fa-layer-group" aria-hidden="true"></span> Insert multi-column magic formatter
+                            </button>
+                        </div>
+                        <input type="hidden" name="sections">
+                        <label class="mb-3 sres-form-label {% if vars.ui_hide.email_sections %}d-none{% endif %} sres-contact-type-config sres-contact-type-email sres-contact-type-canvasinbox">Message body additional sections</label>
+                        <div class="form-group {% if vars.ui_hide.email_sections %}d-none{% endif %} sres-contact-type-config sres-contact-type-email sres-contact-type-canvasinbox">
+                            <div id="section_container" class="col">
+                                <div id="section_template" class="d-none mb-3 sres-section-parent">
+                                    <div class="row col-sm-12 form-inline mb-2">
+                                        <label class="mr-2">Additional section</label>
+                                        {% if not vars.filter_disabled %}
+                                            <button type="button" class="btn btn-light mr-2" id="section_raise_section_x" aria-label="Move section up" data-tippy-content="Move section up">
+                                                <span class="fa fa-angle-up"></span>
+                                            </button>
+                                            <button type="button" class="btn btn-light mr-2" id="section_lower_section_x" aria-label="Move section down" data-tippy-content="Move section down">
+                                                <span class="fa fa-angle-down"></span>
+                                            </button>
+                                            <button type="button" class="btn btn-light mr-2" id="section_delete_section_x" aria-label="Delete section" data-tippy-content="Delete section">
+                                                <span class="fa fa-trash"></span>
+                                            </button>
+                                            <button type="button" class="btn btn-light mr-2" id="section_clone_section_x" aria-label="Clone section" data-tippy-content="Clone section">
+                                                <span class="fa fa-clone"></span>
+                                            </button>
+                                        {% endif %}
+                                        <select class="form-control" id="section_showwhen_section_x" name="section_showwhen_section_x">
+                                            <option value="always">Always show this section</option>
+                                            <option value="conditions">Only show when conditions are met</option>
+                                        </select>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col">
+                                            <div id="email_body_section_section_x" class="sres-tinymce-editor tinymce-basic border rounded sres-column-rereferenceable sres-column-rereferenceable-html" ></div>
+                                            <button type="button" class="btn btn-sm btn-light sres-select-column-trigger {% if vars.ui_hide.btn_insert_column_reference %}d-none{% endif %} {% if not vars.filter_disabled %}sres-disable-upon-translate-column-references{% endif %}" {{ vars.filter_disabled }}>
+                                                <span class="fa fa-dollar-sign" aria-hidden="true"></span> Insert column reference
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-light sres-translate-column-references" data-sres-current-mode="design" data-sres-uuid="{{ filter.config.uuid }}">Show friendly column names</button>
+                                            <button type="button" class="btn btn-sm btn-light sres-multi-column-magic-formatter-insert {% if vars.ui_hide.btn_mc_magic_formatter %}d-none{% endif %} {% if not vars.filter_disabled %}sres-disable-upon-translate-column-references{% endif %}" {{ vars.filter_disabled }}>
+                                                <span class="fa fa-layer-group" aria-hidden="true"></span> Insert multi-column magic formatter
+                                            </button>
+                                        </div>
+                                        <div class="col-sm-6 sres-querybuilder-container collapse" id="section_conditions_section_x">
+                                        </div>
+                                        <input type="hidden" name="rules_for_section_conditions_section_x" id="rules_for_section_conditions_section_x">
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col">
+                                <button type="button" class="btn btn-primary btn-sm" id="add_section" {{ vars.filter_disabled }}>
+                                    <span class="fa fa-plus" aria-hidden="true"></span> Add section
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-group sres-contact-type-config sres-contact-type-email sres-contact-type-canvasinbox">
+                            <label class="sres-form-label">Message body last section</label>
+                            <div name="email_body_last" id="email_body_last" class="sres-tinymce-editor tinymce-basic border rounded sres-column-rereferenceable sres-column-rereferenceable-html">{{ (request.form.email_body_last or filter.config.email.body_last)|safe_no_script }}</div>
+                            <button type="button" class="btn btn-sm btn-light sres-select-column-trigger {% if vars.ui_hide.btn_insert_column_reference %}d-none{% endif %} {% if not vars.filter_disabled %}sres-disable-upon-translate-column-references{% endif %}" data-sres-insert-column-target="email_body_last" {{ vars.filter_disabled }}>
+                                <span class="fa fa-dollar-sign" aria-hidden="true"></span> Insert column reference
+                            </button>
+                            <button type="button" class="btn btn-sm btn-light sres-translate-column-references" data-sres-current-mode="design" data-sres-uuid="{{ filter.config.uuid }}">Show friendly column names</button>
+                            <button type="button" class="btn btn-sm btn-light sres-multi-column-magic-formatter-insert {% if vars.ui_hide.btn_mc_magic_formatter %}d-none{% endif %} {% if not vars.filter_disabled %}sres-disable-upon-translate-column-references{% endif %}" data-sres-insert-target="email_body_last" {{ vars.filter_disabled }}>
+                                <span class="fa fa-layer-group" aria-hidden="true"></span> Insert multi-column magic formatter
+                            </button>
+                        </div>
+                        <div class="form-group {% if vars.ui_hide.attachments %}d-none{% endif %} sres-contact-type-config sres-contact-type-email">
+                            <label class="sres-form-label">Attachments</label>
+                            <a href="#attachments_container" data-toggle="collapse">Options <span class="fa fa-angle-down"></span></a>
+                            <div id="attachments_container" class="collapse">
+                                <label>Existing file(s)</label>
+                                {% if filter.config.email.attachments %}
+                                    <ul>
+                                    {% for attachment in filter.config.email.attachments %}
+                                        <li>
+                                            <a href="{{ attachment.access_url }}" target="_blank">
+                                                {{ attachment.original_filename }}
+                                            </a>
+                                            {{ attachment.filesize|filesizeformat }}
+                                            <input type="checkbox" name="email_attachments_delete_{{ loop.index0 }}" id="email_attachments_delete_{{ loop.index0 }}" value="{{ attachment.filename }}" {{ vars.filter_disabled }}>
+                                            <label for="email_attachments_delete_{{ loop.index0 }}">Mark for deletion</label>
+                                        </li>
+                                    {% endfor %}
+                                    </ul>
+                                {% else %}
+                                    No existing files
+                                {% endif %}
+                                <br>
+                                <label>Upload file(s)</label>
+                                <input type="file" name="email_attachments" id="email_attachments" multiple class="form-control" {{ vars.filter_disabled }}>
+                            </div>
+                        </div>
+                        <div class="form-group {% if vars.ui_hide.tracking %}d-none{% endif %} sres-contact-type-config sres-contact-type-email sres-contact-type-canvasinbox">
+                            <label class="sres-form-label">Tracking</label>
+                            <a href="#email_tracking_config_container" data-toggle="collapse">Options <span class="fa fa-angle-down"></span></a>
+                            <div id="email_tracking_config_container" class="collapse">
+								<div class="alert alert-info">
+									An invisible tracking beacon will be included in each message. This beacon records when each recipient opens the message. These recorded counts are saved in a column, whose name can be specified here.
+								</div>
+                                {% if not vars.filter_disabled %}
+                                    <div class="mb-2">
+                                        <label>
+                                            <input type="radio" name="email_tracking_column_action" value="new" {% if vars.mode == 'new' or not vars.tracking_column._id or vars.cloned %}checked{% endif %}>
+                                            Make a new column called:
+                                        </label>
+                                        <input type="text" name="email_tracking_column_name" id="email_tracking_column_name" class="form-control" required data-sres-required-for="message" {{ vars.filter_disabled }}>
+                                    </div>
+                                {% endif %}
+                                {% if vars.mode == 'edit' and vars.tracking_column._id %}
+                                    <div class="mb-2">
+                                        <label>
+                                            <input type="radio" name="email_tracking_column_action" value="current" {% if not vars.cloned %}checked{% endif %}>
+                                            Current tracking column:
+                                        </label>
+                                        <input type="hidden" name="tracking_record_tableuuid" value="{{ vars.tracking_column.config.table_uuid if vars.tracking_column._id else '' }}">
+                                        <input type="hidden" name="tracking_record_columnuuid" value="{{ vars.tracking_column.config.uuid if vars.tracking_column._id else '' }}">
+                                        {{ vars.tracking_column.get_friendly_name() }}
+                                        <a href="{{ url_for('table.edit_column', table_uuid=vars.tracking_column.config.table_uuid if vars.tracking_column._id else '', column_uuid=vars.tracking_column.config.uuid if vars.tracking_column._id else '') }}" target="_blank">
+                                            <span class="fa fa-cog"></span> Settings
+                                        </a>
+                                    </div>
+                                {% endif %}
+                                {% if not vars.filter_disabled %}
+                                    <div class="mb-2">
+                                        <label>
+                                            <input type="radio" name="email_tracking_column_action" value="another">
+                                            Or use another existing column
+                                        </label>
+                                        <input type="hidden" id="tracking_column_use_existing" name="tracking_column_use_existing" data-sres-tableuuid="" class="sres-condition-column-receiver">
+                                        <span id="tracking_column_use_existing_placeholder" class="sres-condition-column-placeholder" data-sres-disabled="{{ vars.filter_disabled }}">Pick a column</span>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="form-group {% if vars.ui_hide.feedback %}d-none{% endif %} sres-contact-type-config sres-contact-type-email sres-contact-type-canvasinbox">
+                            <label class="sres-form-label">Feedback</label>
+                            <a href="#feedback_container" data-toggle="collapse">Options <span class="fa fa-angle-down"></span></a>
+                            <div id="feedback_container" class="collapse">
+								<div class="alert alert-info">
+									A short feedback request can be placed at the end of each message, asking whether the message has been helpful. Responses will be recorded to the database.
+								</div>
+                                <select name="feedback_request" class="form-control" {{ vars.filter_disabled }}>
+                                    <option value="helpfulyesno" {% if filter.config.email.feedback.style == "helpfulyesno" %}selected{% endif %}>Request feedback</option>
+                                    <option value="null" {% if filter.config.email.feedback.style == "null" %}selected{% endif %}>Do not request feedback</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row collapse {% if 'sms' in filter.config.contact_type %}show{% endif %} sres-contact-type-configuration-container-sms">
+                    <label class="col-sm-2 col-form-label">SMS</label>
+                    <div class="col-sm-10">
+                        {# TODO #}
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col">
+                        <input type="hidden" name="filteruuid" value="{{ filter.config.uuid }}" />
+                        <input type="hidden" name="action" value="{{ vars.mode }}" />
+                        {% if not vars.collective_sharing %}
+                            {% if not vars.filter_disabled %}
+                                <input type="hidden" name="save_and_preview" value="" />
+                                <button id="btn_save" class="btn btn-primary" name="save_action" value="save">
+                                    <span class="fa fa-save"></span> Save
+                                </button>
+                                <button id="btn_save_and_preview" class="btn btn-outline-primary" name="save_action" value="save_and_preview">
+                                    <span class="fa fa-save"></span> Save and preview
+                                </button>
+                            {% endif %}
+                            {% if vars.mode == 'edit' %}
+                                <a href="{{ url_for('filter.preview_filter', filter_uuid=filter.config.uuid, uih=request.args.get('uih')) }}" role="button" class="btn btn-outline-primary">
+                                    <span class="fa fa-play"></span> Preview without saving
+                                </a>
+                                <a href="{{ url_for('collective.share_asset', asset_type='filter', source_asset_uuid=filter.config.uuid) }}" role="button" class="btn btn-outline-primary {% if vars.ui_hide.btn_collective %}d-none{% endif %}">
+                                    <span class="fa fa-share-alt"></span> Share to SRES Collective
+                                </a>
+                                <a href="{{ url_for('filter.clone_filter', filter_uuid=filter.config.uuid) }}" role="button" class="btn btn-outline-primary {% if vars.ui_hide.btn_clone %}d-none{% endif %}">
+                                    <span class="fa fa-clone"></span> Clone
+                                </a>
+                                <a href="{{ url_for('filter.convert_to_portal', filter_uuid=filter.config.uuid) }}" role="button" class="btn btn-outline-primary {% if vars.ui_hide.btn_convert_to_portal %}d-none{% endif %}">
+                                    <span class="fa fa-window-maximize"></span> Convert to portal
+                                </a>
+                            {% endif %}
+                            {% if vars.mode == 'edit' and not vars.filter_disabled %}
+                                <button type="button" class="btn btn-outline-primary sres-column-rereferencer-show {% if vars.ui_hide.btn_rereference %}d-none{% endif %}">
+                                    <span class="fa fa-random" aria-hidden="true"></span> Re-reference columns
+                                </button>
+                                <a href="{{ url_for('filter.delete_filter', filter_uuid=filter.config.uuid) }}" role="button" class="btn btn-outline-danger {% if vars.ui_hide.btn_delete %}d-none{% endif %}">
+                                    <span class="fa fa-trash"></span> Delete
+                                </a>
+                            {% endif %}
+                        {% else %}
+                            {{ collective_share.render_collective_action_buttons(vars.collective_sharing_asset, vars.collective_sharing_mode, vars) }}
+                        {% endif %}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    </main>
+    
+    {% import 'select-column.html' as select_column %}
+    {{ select_column.column_chooser(
+        available_tables=vars.authorised_tables,
+        student_info_items=vars.SYSTEM_COLUMNS,
+        magic_formatters_list=vars.MAGIC_FORMATTERS_LIST
+    ) }}
+    
+    {{ select_users.find_user() }}
+    {{ select_users.bulk_edit_users() }}
+    
+    {% import 'column-rereferencer.html' as column_rereferencer %}
+    {{ column_rereferencer.column_rereferencer(available_tables=vars.authorised_tables) }}
+    
+    <!-- modal for delete filter -->
+    <div class="modal fade" id="confirm_delete" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Are you sure?</h4>
+                </div>
+                <div class="modal-body">
+                    <span class="fa fa-alert" aria-hidden="true"></span>
+                    Warning: all data currently in this filter will be <strong>lost permanently</strong> if you proceed.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-dismiss="modal">Do not delete</button>
+                    <button type="button" id="deleteButton" class="btn btn-danger" data-sres-action="{{ url_for('filter.delete_filter', filter_uuid=filter.config.uuid) }}">Confirm delete</button>
+                </div>
+            </div>
+        </div>
+    </div>							
+    
+{% endblock %}

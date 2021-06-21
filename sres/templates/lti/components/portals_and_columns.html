@@ -1,0 +1,264 @@
+{% extends 'base.html' %}
+
+{% block head_css2 %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chosen.min.css') }}">
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/jquery-ui.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/chosen.jquery.min.js') }}"></script>
+    <script>
+        ENV['LTI_ASSET_SET'] = "{{ url_for('lti.deploy_lti', asset_type=vars.asset_type, asset_uuid='__asset_uuid__', embed_size='__asset_size__') }}";
+        ENV['PORTAL_EDIT_ENDPOINT'] = "{{ url_for('portal.edit_portal', portal_uuid='__asset_uuid__') }}";
+        ENV['PORTAL_LIST_ENDPOINT'] = "{{ url_for('portal.list_portals') }}";
+        ENV['PORTAL_PREVIEW_ENDPOINT'] = "{{ url_for('portal.view_portal', portal_uuid='__asset_uuid__', preview=1)|safe }}";
+        ENV['COLUMN_EDIT_ENDPOINT'] = "{{ url_for('table.edit_column', table_uuid='__table_uuid__', column_uuid='__column_uuid__') }}";
+        ENV['TABLE_VIEW_ENDPOINT'] = "{{ url_for('table.view_table', table_uuid='__table_uuid__') }}";
+    </script>
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    {% raw %}
+        <script id="portal_select_option_template" type="text/x-handlebars-template">
+            <option value="{{uuid}}">
+                {{name}}
+                {{#if description}} ({{description}}){{/if}}
+                {{#if active_now}} [ACTIVE]{{/if}}
+            </option>
+        </script>
+    {% endraw %}
+    
+    {% if vars.asset_type == 'portal' %}
+        <script>
+            /** 
+                PORTALS 
+            **/
+            // Load portals via AJAX
+            $(document).ready(function(){
+                $.ajax({
+                    url: ENV['PORTAL_LIST_ENDPOINT'],
+                    method: 'GET',
+                    success: function(data) {
+                        data = JSON.parse(data);
+                        var template = Handlebars.compile(document.getElementById("portal_select_option_template").innerHTML);
+                        data.forEach(function(portal){
+                            $("#available_portals").append(template({
+                                uuid: portal.uuid,
+                                active_now: portal.active_now,
+                                name: portal.name,
+                                description: portal.description
+                            }));
+                        });
+                        $("#available_portals").trigger('chosen:updated');
+                    }
+                });
+            });
+            // Studentview/portals dropdown
+            $(document).ready(function(){
+                $("#available_portals")
+                    .trigger('change')
+                    .chosen({width: '100%', search_contains: true});
+            });
+            $(document).on('change', '#available_portals, #asset_lti_size', function(){
+                // update button statuses
+                if ($(this).val()) {
+                    $('#sv_edit, #asset_lti_set, #sv_preview')
+                        .prop('disabled', false)
+                        .removeClass('disabled');
+                } else {
+                    $('#sv_edit, #asset_lti_set, #sv_preview')
+                        .prop('disabled', true)
+                        .addClass('disabled');
+                }
+                // update button hrefs
+                let svUUID = $('#available_portals').val();
+                let portalSize = $('#asset_lti_size').val();
+                let setPortalUrl = ENV['LTI_ASSET_SET'].replace('__asset_uuid__', svUUID).replace('__asset_size__', portalSize);
+                console.log(svUUID);
+                if (svUUID.length) {
+                    $('#asset_lti_set').attr('href', setPortalUrl);
+                    $('#sv_edit').attr('href', ENV['PORTAL_EDIT_ENDPOINT'].replace('__asset_uuid__', svUUID));
+                    $('#sv_preview').attr('href', ENV['PORTAL_PREVIEW_ENDPOINT'].replace('__asset_uuid__', svUUID));
+                } else {
+                    $('#asset_lti_set').attr('href', '#');
+                    $('#sv_edit').attr('href', '#');
+                    $('#sv_preview').attr('href', '#');
+                }
+            });
+        </script>
+    {% elif vars.asset_type == 'column' or vars.asset_type == 'column_sda' %}
+        <script>
+            // Pick a column
+            $(document).on('click', 'span.sres-condition-column-placeholder', function(){
+                var receiver = $(this).siblings('input:hidden.sres-condition-column-receiver');
+                show_column_chooser(receiver.attr('id'), '', null, null, null, null, receiver.val(), true);
+            });       
+            $(document).on('change', '#columnuuid_to_embed, #column_entry_mode, #asset_lti_size, #column_show_header, #column_show_quickinfo', function(){
+                // update button statuses
+                let columnUuid = $('#columnuuid_to_embed').val();
+                if (columnUuid.length) {
+                    $('#column_edit, #asset_lti_set, #table_view')
+                        .prop('disabled', false)
+                        .removeClass('disabled');
+                } else {
+                    $('#column_edit, #asset_lti_set, #table_view')
+                        .prop('disabled', true)
+                        .addClass('disabled');
+                }
+                // update button hrefs
+                let tableUuid = $('#columnuuid_to_embed').attr('data-sres-tableuuid');
+                let assetSize = $('#asset_lti_size').val();
+                let setAssetUrl = ENV['LTI_ASSET_SET'].replace('__asset_uuid__', columnUuid).replace('__asset_size__', assetSize) + '?';
+                setAssetUrl += '&column_entry_mode=' + $('#column_entry_mode').val();
+                setAssetUrl += '&column_show_header=' + $('#column_show_header').val();
+                setAssetUrl += '&column_show_quickinfo=' + $('#column_show_quickinfo').val();
+                console.log('setAssetUrl', setAssetUrl);
+                if (columnUuid.length) {
+                    $('#asset_lti_set').attr('href', setAssetUrl);
+                    $('#column_edit').attr('href', ENV['COLUMN_EDIT_ENDPOINT'].replace('__table_uuid__', tableUuid).replace('__column_uuid__', columnUuid));
+                    $('#table_view').attr('href', ENV['TABLE_VIEW_ENDPOINT'].replace('__table_uuid__', tableUuid));
+                } else {
+                    $('#asset_lti_set').attr('href', '#');
+                    $('#column_edit').attr('href', '#');
+                    $('#table_view').attr('href', '#');
+                }
+            });
+            $(document).on('change', '#column_entry_mode', function(){
+                if ($(this).val() == 'single') {
+                    $('#column_show_quickinfo').parents('.form-group').removeClass('d-none');
+                } else {
+                    $('#column_show_quickinfo').parents('.form-group').addClass('d-none');
+                }
+            });
+            $(document).ready(function(){
+                $('#columnuuid_to_embed').trigger('change');
+                $('#column_entry_mode').trigger('change');
+                $('#asset_lti_size').trigger('change');
+            });
+        </script>
+    {% endif %}
+    <script>
+        // Asset embed click
+        $(document).on('click', '#asset_lti_set', function(){
+            let svUUID = $('#available_portals').val();
+            let portalSize = $('#asset_lti_size').val();
+            $.notify(
+                {message: '<span class="fa fa-circle-notch spinning"></span> Loading, please wait...'},
+                {type: 'info'}
+            );
+        });
+    </script>
+{% endblock %}
+
+{% block body %}
+
+{% if vars.asset_type == 'column' or vars.asset_type == 'column_sda' %}
+    {% import 'select-column.html' as select_column %}
+    {{ select_column.column_chooser(
+        available_tables=vars.authorised_tables,
+        student_info_items=[],
+        general_fields_items=[],
+        show_magic_formatters=False,
+        modal_header='Select a column',
+        columns_tab_title='Columns',
+        sda_only=(True if vars.asset_type == 'column_sda' else False),
+        base_only=True
+    ) }}
+{% endif %}
+
+<div style="margin-top: 20px;" class="card bg-light">
+    <div class="card-header">
+        {% if vars.asset_type == 'portal' %}
+            <span class="fa fa-window-maximize" aria-hidden="true"></span> Student portals
+        {% elif vars.asset_type == 'column' %}
+            <span class="fa fa-columns" aria-hidden="true"></span> Staff-access columns
+        {% elif vars.asset_type == 'column_sda' %}
+            <span class="fa fa-columns" aria-hidden="true"></span> Student direct access columns
+        {% endif %}
+    </div>
+    <div class="card-body">
+        {% if vars.asset_type == 'portal' %}
+            <div class="row">
+                <div class="col-sm-12">
+                    <label>Available portals</label>
+                    <div>
+                        <select id="available_portals" data-placeholder="Select a portal">
+                            <option></option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        {% elif vars.asset_type == 'column' or vars.asset_type == 'column_sda' %}
+            <div class="row">
+                <div class="col-sm-12">
+                    <input type="hidden" id="columnuuid_to_embed" name="columnuuid_to_embed" 
+                        data-sres-tableuuid="" value="" class="sres-condition-column-receiver">
+                    <label class="sres-form-label">Column:</label>
+                    <span class="sres-condition-column-placeholder sres-clickable text-primary">Pick a column</span>
+                </div>
+            </div>
+        {% endif %}
+        <div class="row mt-2">
+            <div class="col">
+                <div class="form-group">
+                    <label for="asset_lti_size">Embedded size</label>
+                    <select class="form-control" id="asset_lti_size">
+                        {% for key, meta in vars.PORTAL_EMBED_SIZES.items() %}
+                            <option value="{{ key }}">{{ meta.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% if vars.asset_type == 'column' or vars.asset_type == 'column_sda' %}
+                    <div class="form-group">
+                        <label for="column_entry_mode">Data entry mode</label>
+                        <select class="form-control" id="column_entry_mode">
+                            <option value="single">Single</option>
+                            <option value="roll">Roll</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="column_show_header">Show header bar</label>
+                        <select class="form-control" id="column_show_header">
+                            <option value="hide">No</option>
+                            <option value="show">Yes</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="column_show_quickinfo">Show quick info panel</label>
+                        <select class="form-control" id="column_show_quickinfo">
+                            <option value="show">Yes</option>
+                            <option value="hide">No</option>
+                        </select>
+                    </div>
+                {% endif %}
+                <div class="form-group">
+                    <a class="btn btn-primary" role="button" id="asset_lti_set"><span class="fa fa-plug"></span> Embed</a>
+                    {% if vars.asset_type == 'portal' %}
+                        <a class="btn btn-outline-primary" role="button" id="sv_preview" target="_blank">
+                            <span class="fa fa-eye"></span>
+                            Preview portal
+                            <span class="small"><span class="fa fa-external-link-alt"></span></span>
+                        </a>
+                        <a class="btn btn-outline-primary" role="button" id="sv_edit" target="_blank">
+                            <span class="fa fa-pen"></span>
+                            Edit portal
+                            <span class="small"><span class="fa fa-external-link-alt"></span></span>
+                        </a>
+                    {% elif vars.asset_type == 'column' or vars.asset_type == 'column_sda' %}
+                        <a class="btn btn-outline-primary" role="button" id="column_edit" target="_blank">
+                            <span class="fa fa-pen"></span>
+                            Edit column
+                            <span class="small"><span class="fa fa-external-link-alt"></span></span>
+                        </a>
+                        <a class="btn btn-outline-primary" role="button" id="table_view" target="_blank">
+                            <span class="fa fa-table"></span>
+                            View list
+                            <span class="small"><span class="fa fa-external-link-alt"></span></span>
+                        </a>
+                    
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}

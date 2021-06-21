@@ -1,0 +1,204 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+    Interactions for {{ vars.asset_name }} - {{ asset.config.name }}
+{% endblock %}
+
+{% block head_css2 %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dataTables.bootstrap4.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/buttons.bootstrap4.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive.bootstrap4.min.css') }}">
+    <style>
+        iframe.sres-interaction-preview {
+            width: 100%;
+            height: 800px;
+            border: 1px solid black;
+            border-radius: 5px;
+        }
+    </style>
+{% endblock %}
+
+{% block head_js2 %}
+    {% raw %}
+        <script id="filter-message-template" type="text/x-handlebars-template">
+            <div data-sres-loguuid="{{loguuid}}">
+                <div>
+                    <label class="sres-form-label">Target</label>
+                    {{target}}
+                </div>
+                <div>
+                    <label class="sres-form-label">Type</label>
+                    {{type}}
+                </div>
+                <div>
+                    <label class="sres-form-label">Sent</label>
+                    {{sent}}
+                </div>
+                <div>
+                    <label class="sres-form-label">Subject</label>
+                    {{subject}}
+                </div>
+                <div>
+                    <label class="sres-form-label">Body</label>
+                    <span class="fa fa-info-circle" data-tippy-content="This is the exact body that was sent, except tracking information has been removed."></span>
+                    <div>
+                        {{{body}}}
+                    </div>
+                </div>
+            </div>
+        </script>
+    {% endraw %}
+    <script src="{{ url_for('static', filename='js/jquery.dataTables.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dataTables.bootstrap4.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dataTables.buttons.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/buttons.bootstrap4.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/buttons.html5.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dataTables.responsive.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/responsive.bootstrap4.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jszip.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.interactions-view-log.js') }}"></script>
+    <script>
+        $(document).ready(function() {
+            $("#table_interaction_logs").DataTable({
+                dom: 'Blftip',
+                buttons: ['csvHtml5']
+            });
+        });
+        ENV['GET_SENT_MESSAGES_ENDPOINT'] = '{{ url_for("filter.get_sent_messages", filter_uuid=asset.config.uuid, target="__target__")|safe }}';
+        ENV['PREVIEW_PORTAL_URL'] = '{{ url_for("portal.view_portal", portal_uuid=asset.config.uuid, preview=1, identifier="__identifier__")|safe }}';
+    </script>
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col">
+            <h2>Interactions for {{ vars.asset_name }} - {{ asset.config.name }}</h2>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col">
+            <div class="form-group row">
+                <label class="col-sm-2 col-form-label sres-form-label">{{ vars.asset_name|capitalize }} information</label>
+                <div class="col-sm-10">
+                    <div>
+                        <label class="sres-form-label">Name</label>
+                        {{ asset.config.name }}
+                        <a href="{{ url_for(vars.asset_name + '.edit_' + vars.asset_name, **{vars.asset_name + '_uuid': asset.config.uuid}) }}" data-tippy-content="View/edit settings" aria-label="View/edit settings"><span class="fa fa-cog"></span></a>
+                    </div>
+                    <div>
+                        <label class="sres-form-label">Description</label> {{ asset.config.description }}
+                    </div>
+                </div>
+            </div>
+            <div class="form-group row">
+                <label class="col-sm-2 col-form-label sres-form-label">Quick stats</label>
+                <div class="col-sm-10">
+                    {% for quick_stat in vars.quick_stats %}
+                        <div>
+                            <span class="fa fa-{{ quick_stat.icon }}"></span>
+                            {{ quick_stat.html|safe }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="form-group row">
+                <label class="col-sm-2 col-form-label sres-form-label">Feedback</label>
+                <div class="col-sm-10">
+                    {% if vars.feedback_was_requested %}
+                        {% for vote_type, comments in vars.comments_by_vote.items() %}
+                            <div>
+                                <label class="sres-form-label">Comments for {{ vote_type }}</label>
+                                <ul>
+                                    {% for comment in  comments %}
+                                        <li>{{ comment }}</li>
+                                    {% else %}
+                                        No comments received.
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% else %}
+                            No feedback available.
+                            {% if vars.feedback_explanation %}
+                                {{ vars.feedback_explanation }}
+                            {% endif %}
+                        {% endfor %}
+                    {% else %}
+                        Feedback was not requested.
+                    {% endif %}
+                </div>
+            </div>
+            <div class="form-group row">
+                <label class="col-sm-2 col-form-label sres-form-label">Interactions by student</label>
+                <div class="col-sm-10">
+                    <table class="table" id="table_interaction_logs">
+                        <thead>
+                            <th>Target</th>
+                            <th>Opens</th>
+                            {% if vars.interaction_logs %}
+                                {% for url in vars.interaction_logs.urls %}
+                                    <th>{{ url }}</th>
+                                {% endfor %}
+                            {% endif %}
+                        </thead>
+                        <tbody>
+                            {% if vars.interaction_logs %}
+                                {% for target, interaction in vars.interaction_logs.records.items() %}
+                                    <tr>
+                                        <td>
+                                            {% for action in vars.interaction_record_actions %}
+                                                <a href="javascript:void(0);" data-tippy-content="{{ action.tooltip }}" aria-label="{{ action.tooltip }}" data-sres-target-fn="{{ action.target_fn }}" data-sres-target-identifier="{{ target }}" data-sres-loguuid="{{ interaction.loguuid }}">
+                                                    <span class="fa fa-{{ action.icon }}"></span>
+                                                    {{ action.text }}
+                                                </a>
+                                            {% endfor %}
+                                            {# show the target identifier #}
+                                            {% if vars.is_identity_anonymiser_active %}
+                                                {{ target|anonymise_id }}
+                                            {% else %}
+                                                {{ target }}
+                                            {% endif %}
+                                            {% if interaction.contact_type_display %}
+                                                <span class="badge badge-info ml-2">{{ interaction.contact_type_display }}</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ interaction.opens }}</td>
+                                        {% for url in vars.interaction_logs.urls %}
+                                            <td>{{ interaction.clicks[url] }}</td>
+                                        {% endfor %}
+                                    </tr>
+                                {% endfor %}
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% if vars.show_interaction_details %}
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Details</label>
+                    <div class="col-sm-10">
+                        <div id="interaction_details_container">
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+{% endblock %}

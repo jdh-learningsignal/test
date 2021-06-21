@@ -1,0 +1,135 @@
+{% extends 'base-staff.html' %}
+
+{% set table_uuid = table.config.uuid %}
+
+{% block title %}
+    View related assets - {{ table.config.code }}
+{% endblock %}
+
+{% block head_css2 %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dataTables.bootstrap4.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/buttons.bootstrap4.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive.bootstrap4.min.css') }}">
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/jquery.dataTables.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dataTables.bootstrap4.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dataTables.buttons.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/buttons.bootstrap4.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/buttons.html5.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dataTables.responsive.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/responsive.bootstrap4.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jszip.min.js') }}"></script>
+    <script>
+		$(document).ready(function(){
+			$('table.table').DataTable({
+				dom: "<'row'<'col'B><'col'p>><'row'<'col'l><'col'ri><'col'f>><'row'<'col't>>",
+				lengthMenu: [ [10, 30, 50, 100, -1], [10, 30, 50, 100, "All"] ],
+				buttons: [ {extend: 'csv'},
+						   {extend: 'excelHtml5'}],
+				responsive:true
+			});
+		});
+    </script>
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col">
+            <h2>View related assets for {{ table.get_full_name() }}</h2>
+        </div>
+    </div>
+    <div class="row mt-4">
+        <div class="col">
+            <h3>Filters</h3>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th>Date run</th>
+                        <th>Time run</th>
+                        <th>Recipients</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for filter in filters %}
+                        <tr>
+                            <td>{{ filter.name }}</td>
+                            <td>{{ filter.description }}</td>
+                            <td>{{ filter.date_run }}</td>
+                            <td>{{ filter.time_run }}</td>
+                            <td>{{ filter.recipient_count }}</td>
+                            <td>
+                                <a href="{{ url_for('filter.edit_filter', filter_uuid=filter.uuid) }}" title="Edit"><span class="fa fa-pen"></span></a>
+                                <a href="{{ url_for('filter.clone_filter', filter_uuid=filter.uuid) }}" title="Clone"><span class="fa fa-clone"></span></a>
+                                {% if filter.date_run %}
+                                    <a href="{{ url_for('filter.view_logs', filter_uuid=filter.uuid) }}" title="View logs"><span class="fa fa-history"></span></a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div class="row mt-4">
+        <div class="col">
+            <h3>Portals</h3>
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th>Active now</th>
+                        <th>Active from</th>
+                        <th>Active to</th>
+                        <th>Active duration (days)</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for portal in portals %}
+                        <tr>
+                            <td>{{ portal.name }}</td>
+                            <td>{{ portal.description }}</td>
+                            <td>
+                                {{ portal.active_now }}
+                                {% if portal.active_now_messages %}
+                                    <span data-tippy-content="{{ portal.active_now_messages }}"><span class="fa fa-info-circle"></span></span>
+                                {% endif %}
+                            </td>
+                            <td>{{ portal.active_from }}</td>
+                            <td>{{ portal.active_to }}</td>
+                            <td>{{ portal.active_duration }}</td>
+                            <td>
+                                <a href="{{ url_for('portal.edit_portal', portal_uuid=portal.uuid) }}" title="Edit"><span class="fa fa-pen"></span></a>
+                                <a href="{{ url_for('portal.view_portal', portal_uuid=portal.uuid, preview=1) }}" title="Preview"><span class="fa fa-eye"></span></a>
+                                <a href="{{ url_for('portal.clone_portal', portal_uuid=portal.uuid) }}" title="Clone"><span class="fa fa-clone"></span></a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+{% endblock %}

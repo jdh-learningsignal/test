@@ -1,0 +1,57 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+    Act as user
+{% endblock %}
+
+{% block head_css2 %}
+{% endblock %}
+
+{% block head_js2 %}
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col">
+            <h2>Act as user</h2>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col">
+            <form method="post" action="{{ url_for('admin.act_as') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="nonce" value="{{ vars.nonce }}">
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Username</label>
+                    <div class="col-sm-10">
+                        <input name="username" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">&nbsp;</label>
+                    <div class="col-sm-10">
+                        <button class="btn btn-primary">Act</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+{% endblock %}

@@ -1,0 +1,137 @@
+{% extends 'base-staff.html' %}
+
+{% set table_uuid = table.config.uuid %}
+
+{% set single_url = get_go_url(url_for('entry.add_value', table_uuid=table.config.uuid, column_uuid=column.config.uuid, _external=True)) %}
+{% set bulk_url = get_go_url(url_for('entry.add_value_bulk', table_uuid=table.config.uuid, column_uuid=column.config.uuid, _external=True)) %}
+{% set roll_url = get_go_url(url_for('entry.add_value_roll', table_uuid=table.config.uuid, column_uuid=column.config.uuid, _external=True)) %}
+
+{% block title %}
+    Quick access links - {{ column.config.name }}
+{% endblock %}
+
+{% block head_css2 %}
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/qrcode.min.js') }}"></script>
+    <script>
+        function sresQuickAccessQR(url, targetElementId) {
+            // Draw QR if needed
+            if ($("#" + targetElementId + "_qr").length > 0) {
+                new QRCode(targetElementId + "_qr", {
+                    text: url,
+                    width: 150,
+                    height: 150,
+                    colorDark : "#000000",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.H
+                });
+            }
+        }
+        function shortenUrl(longUrl, targetElementId) {
+            $.post(
+                "{{ url_for('index.shorten_url') }}",
+                {long_url: longUrl},
+                function(data) {
+                    data = JSON.parse(data);
+                    var url = new URL(data.short_url);
+                    $("#" + targetElementId).html('<a href="' + data.short_url + '" target="_blank">' + url.hostname + url.pathname + '</a>');
+                }
+            );
+        }
+        $(document).ready(function(){
+            // data_entry_url
+            shortenUrl("{{ url_for('entry.add_value', table_uuid=table.config.uuid, column_uuid=column.config.uuid, _external=True) }}", 'data_entry_url');
+            sresQuickAccessQR("{{ single_url }}", 'data_entry_url');
+            {% if not column.has_multiple_report_mode_enabled() %}
+                // data_entry_url_bulk
+                shortenUrl("{{ url_for('entry.add_value_bulk', table_uuid=table.config.uuid, column_uuid=column.config.uuid, _external=True) }}", 'data_entry_url_bulk');
+                sresQuickAccessQR("{{ bulk_url }}", 'data_entry_url_bulk');
+                // data_entry_roll_view
+                shortenUrl("{{ url_for('entry.add_value_roll', table_uuid=table.config.uuid, column_uuid=column.config.uuid, _external=True) }}", 'data_entry_roll_view');
+                sresQuickAccessQR("{{ roll_url }}", 'data_entry_roll_view');
+            {% endif %}
+            // view_column_url
+            //shortenUrl("{{ url_for('entry.add_value_roll', table_uuid=table.config.uuid, column_uuid=column.config.uuid, _external=True) }}", 'view_column_url')
+        });
+    </script>
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col-sm-12">
+        	<div>
+            	<h3>{{ table.get_full_name() }}</h3>
+                <h1>{{ column.config.name }}</h1>
+                <h2>{{ column.config.description }}</h2>
+				<div class="row">
+					<div class="col-sm-4">
+						<h3>Single mode<br><span id="data_entry_url" class="text-monospace">loading...</span></h3>
+						<div class="mt-4 mb-4" id="data_entry_url_qr"></div>
+                        <p>
+                            If the short URL does not work, try:
+                            <a href="{{ single_url }}">{{ single_url }}</a>
+                        </p>
+					</div>
+                    {% if not column.has_multiple_report_mode_enabled() %}
+                        <div class="col-sm-4">
+                            <h3>Bulk mode<br><span id="data_entry_url_bulk" class="text-monospace">loading...</span></h3>
+                            <div class="mt-4 mb-4" id="data_entry_url_bulk_qr"></div>
+                            <p>
+                                If the short URL does not work, try:
+                                <a href="{{ bulk_url }}">{{ bulk_url }}</a>
+                            </p>
+                        </div>
+                        <div class="col-sm-4">
+                            <h3>Roll view mode<br><span id="data_entry_roll_view" class="text-monospace">loading...</span></h3>
+                            <div class="mt-4 mb-4" id="data_entry_roll_view_qr"></div>
+                            <p>
+                                If the short URL does not work, try:
+                                <a href="{{ roll_url }}">{{ roll_url }}</a>
+                            </p>
+                        </div>
+                    {% endif %}
+				</div>
+                <div class="row mt-5">
+                    <div class="col">
+                        <div class="alert alert-info">
+                            <span class="fa fa-exclamation-triangle"></span>
+                            Only authorised staff will be able to access these links.
+                        </div>
+                    </div>
+                </div>
+                {# TODO or deprecate
+                <div style="font-size:0.8em;">
+                	View column data (admin use only)
+                    <br />
+                    <cfoutput><img src="#APPLICATION.DirectoryWebTemp##MakeQRCode(APPLICATION.DirectoryWeb & "viewColumn.cfm?columnuuid=#qColumn.ColumnUUID#&tableuuid=#qColumn.TableUUID#", APPLICATION.DirectoryLocalTemp, 150)#" /></cfoutput>
+                    <br />
+                    URL: <span id="view_column_url" style="font-family:'Courier New', Courier, monospace;">loading...</span>
+                </div>
+                #}
+                <br />
+                <div class="text-muted">
+                	<cfoutput>Requested by {{ vars.user }} {{ vars.now|datetime('datetime') }}</cfoutput>
+                </div>
+            </div>
+		</div>
+    </div>
+    
+{% endblock %}

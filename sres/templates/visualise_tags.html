@@ -1,0 +1,53 @@
+{% extends 'base-staff.html' %}
+
+{% set table_uuid = table.config.uuid %}
+
+{% block title %}
+    Visualise tags - {{ table.config.code }}
+{% endblock %}
+
+{% block body %}
+
+    <div class="row">
+        <div class="col">
+            <h2>Visualise tags for {{ table.get_full_name() }}</h2>
+        </div>
+    </div>
+    <div class="row mt-4">
+        <div class="col">
+          {% if vars['columns']|length == 0 %}
+            <p>No columns in this table have tags</p>
+          {% else %}
+            <table class="table">
+                <thead>
+                    <tr>
+                      <th></th>
+                      {% for column in vars['columns'] %}
+                          {% if column.datatype == 'multiEntry' %}
+                            <th><a href="{{ url_for('table.edit_column_tags', table_uuid=table.config.uuid, column_uuid=column.base_column_uuid) }}">{{ column.display_text }}</a> (/{{ column.maximumValue }})</th>
+                          {% else %}
+                            <th><a href="{{ url_for('table.edit_column_tags', table_uuid=table.config.uuid, column_uuid=column.value) }}">{{ column.display_text }}</a> (/{{ column.maximumValue }})</th>
+                          {% endif %}
+                      {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                      {% for tag, columns in vars['tags'].items() %}
+                        <tr>
+                          <td>{{ tag }}</td>
+                          {% for column in vars['columns'] %}
+                              {% if column.display_text in columns %}
+                                <td>True</td>
+                              {% else %}
+                                <td></td>
+                              {% endif %}
+                          {% endfor %}
+                        </tr>
+                      {% endfor %}
+                </tbody>
+            </table>
+          {% endif %}
+        </div>
+    </div>
+
+{% endblock %}

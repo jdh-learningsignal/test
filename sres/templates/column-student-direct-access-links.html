@@ -1,0 +1,75 @@
+{% extends 'base-staff.html' %}
+
+{% set table_uuid = table.config.uuid %}
+
+{% block title %}
+    Direct access link
+{% endblock %}
+
+{% block head_css2 %}
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/qrcode.min.js') }}"></script>
+    <script>
+        function shortenUrl(longUrl, targetElementId) {
+            $.post(
+                "{{ url_for('index.shorten_url') }}",
+                {long_url: longUrl},
+                function(data) {
+                    data = JSON.parse(data);
+                    var url = new URL(data.short_url);
+                    $("#" + targetElementId).html('<a href="' + data.short_url + '" target="_blank">' + url.hostname + url.pathname + '</a>');
+                }
+            );
+        }
+        $(document).ready(function(){
+            // data_entry_url
+            shortenUrl("{{ vars.url|safe }}", 'sda_url')
+            // Draw QR if needed
+            let targetElementId = 'sda_url';
+            if ($("#" + targetElementId + "_qr").length > 0) {
+                new QRCode(targetElementId + "_qr", {
+                    text: "{{ vars.go_url|safe }}",
+                    width: 200,
+                    height: 200,
+                    colorDark : "#000000",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.H
+                });
+            }
+            
+        });
+    </script>
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+  	<div class="row mt-3">
+		<div class="col-sm-12">
+            <h3>Scan and log in</h3>
+            <div class="pt-3 pb-3" id="sda_url_qr"></div>
+            <p>Or go to <span class="text-monospace" id="sda_url">loading <span class="fa fa-sync-alt spinning" aria-hidden="true"></span></span></p>
+            <p>
+                If the short link does not work, try:
+                <a href="{{ vars.go_url }}">{{ vars.go_url }}</a>
+            </p>
+		</div>
+	</div>
+  
+{% endblock %}

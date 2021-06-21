@@ -1,0 +1,49 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+    Bulk add local users
+{% endblock %}
+
+{% block head_css2 %}
+{% endblock %}
+
+{% block head_js2 %}
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col">
+            <h2>Bulk add local users</h2>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col">
+            <form method="post" action="{{ url_for('admin.add_users_bulk') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="nonce" value="{{ vars.nonce }}">
+                <label>User details</label>
+                <p>Enter a new user on each line, no header, with tab-separated fields in order of {{ (vars.CONFIGURABLE_FIELDS + ['password'])|join(', ') }}.</p>
+                <textarea name="user_info" class="form-control" rows="10"></textarea>
+                <button class="btn btn-primary mt-2">Process</button>
+            </form>
+        </div>
+    </div>
+    
+{% endblock %}

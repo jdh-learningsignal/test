@@ -1,0 +1,705 @@
+{% extends 'base-staff.html' %}
+
+{% import 'collective-share.html' as collective_share %}
+{% import 'select-users.html' as select_users %}
+{% import 'jump-column.html' as jump_column %}
+
+{% if vars.collective_sharing and vars.collective_sharing_mode == 'show' %}
+    {% set table_uuid = 'collective' %}
+{% else %}
+    {% set table_uuid = table.config.uuid %}
+{% endif %}
+
+{% block title %}
+    {% if vars.collective_sharing %}
+        {{ collective_share.show_title(vars.collective_sharing_mode, 'aggregatorcolumn', vars.collective_sharing_asset.config.name) }}
+    {% else %}
+        {% if vars.mode == 'new' %}
+            New aggregator column
+        {% elif vars.mode == 'edit' %}
+            Edit aggregator column - {{ column.config.name }}
+        {% endif %}
+    {% endif %}
+{% endblock %}
+
+{% block head_css2 %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/jquery.multi-select.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/query-builder.default.css') }}">
+    <style>
+        #aggregator_type_mathematical_operations_formula, #aggregator_type_mathematical_operations_formula_friendly {
+            padding: 0.5rem;
+        }
+        .rule-filter-container {
+            width: 100%;
+        }
+        .rule-operator-container {
+            width: 25%;
+        }
+        .sres-tinymce-editor {
+            padding: 0.5rem;
+        }
+        textarea.sres-aggregator-mapper {
+            width: 100%;
+            font-family: monospace;
+            white-space: nowrap;
+            max-height: 300px;
+        }
+        {% if vars.aggregator_mode != 'crosslist' %}
+            .sres-list-chooser-show-chooser {
+                display: none !important;
+            }
+        {% endif %}
+    </style>
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/tinymce/tinymce.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tinymce/jquery.tinymce.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+	<script>
+        ENV['FONT_FORMATS'] = "{{ vars.FONT_FORMATS }}";
+	</script>
+	<script>
+		var tinymceBasicToolbar = ['bold, italic, underline, strikethrough, styleselect, fontselect, fontsizeselect | forecolor, backcolor', 'cut, copy, paste | bullist, numlist, outdent, indent | undo, redo, removeformat | subscript, superscript | code'];
+		let basicConfig = {
+			selector: '.tinymce-basic',
+			toolbar: tinymceBasicToolbar,
+			menubar: false,
+			inline: true,
+			statusbar: true,
+			plugins: 'code lists textcolor colorpicker paste',
+			relative_urls: false,
+			remove_script_host: false,
+			convert_urls: false,
+            extended_valid_elements: 'i[class]'
+		};
+        if (ENV['FONT_FORMATS']) {
+            basicConfig['font_formats'] = ENV['FONT_FORMATS'];
+        }
+        tinymce.init(basicConfig);
+        tinymce.init({
+            selector: '.tinymce-code-only',
+            toolbar: false,
+            menubar: false,
+            inline: true,
+            statusbar: false,
+            content_style: "p {font-family: Monospace !important;}"
+        });
+	</script>
+    <script>
+        // Columns for queryBuilder's 'filters'
+        var queryBuilderFilters = {{ vars.query_builder_filters|tojson }};
+        ENV['column_uuid'] = "{{ column.config.uuid }}";
+        ENV['CHECK_FORMULA_EXPRESSION_ENDPOINT'] = "{{ url_for('table.check_formula_expression', table_uuid=table_uuid, column_uuid=column.config.uuid) }}";
+        ENV['AGGREGATOR_RECALCULATION_ENDPOINT'] = "{{ url_for('table.recalculate_aggregator', table_uuid=table_uuid, column_uuid=column.config.uuid)|safe }}";
+        ENV['GET_ALL_IDENTIFIERS_ENDPOINT'] = "{{ url_for('table.get_all_identifiers', table_uuid=table_uuid, _external=True)|safe }}";
+    </script>
+    <script src="{{ url_for('static', filename='js/ajaxq.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jquery.multi-select.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jquery.quicksearch.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/query-builder.standalone.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.query-builder-base.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.column-aggregator-recalculate.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.column-aggregator-edit.js') }}"></script>
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <script>
+        //waitingDialog.show();
+    </script>
+    
+    <div class="row">
+        <div class="col-sm-8">
+            <h2>
+                {% if vars.collective_sharing %}
+                    {{ collective_share.show_title(vars.collective_sharing_mode, 'aggregatorcolumn', vars.collective_sharing_asset.config.name) }}
+                {% else %}
+                    {% if vars.mode == 'edit' %}
+                        Edit aggregator column {{ column.config.name }}
+                    {% elif vars.mode == 'new' %}
+                        Create new aggregator column
+                    {% endif %}
+                {% endif %}
+            </h2>
+            {% if not vars.collective_sharing %}
+                <h4>In {{ table.config.code }} {{ table.config.name }} ({{ table.config.year }} semester {{ table.config.semester }})</h4>
+            {% endif %}
+        </div>
+        {% if not vars.collective_sharing %}
+            <div class="col-sm-4 mt-3">
+                {{ jump_column.column_jumper(vars.other_available_columns, url_for('table.edit_column', table_uuid=table_uuid, column_uuid='__column_uuid__')) }}
+            </div>
+        {% endif %}
+    </div>
+    <div class="row">
+        <div class="col">
+			<div class="alert alert-info">
+				<span class="fa fa-flask" aria-hidden="true"></span> Aggregator columns are still a bit experimental. Please report any breakages.
+				<br /><br />
+				<strong>Aggregator columns can trigger the update of other aggregator columns.</strong>
+				When setting up aggregator columns, ensure that there are no circular references.
+				If a circular reference is found during recalculation:
+				<ul>
+					<li>any data saving operations feeding into aggregator columns may fail, and</li>
+					<li>an error will occur and the calculated/aggregated value(s) will be unexpected.</li>
+				</ul>
+			</div>
+        </div>
+    </div>
+    {% if vars.aggregator_mode == 'crosslist' %}
+		<div class="row">
+			<div class="col-sm-12">
+				<div class="alert alert-warning">
+					<span class="fa fa-info-circle" aria-hidden="true"></span>
+                    You are currently working in cross-list mode.
+				</div>
+			</div>
+		</div>
+        {% if vars.authorised_and_referenced_table_uuids != vars.referenced_table_uuids %}
+            <div class="row">
+                <div class="col-sm-12">
+                    <div class="alert alert-danger">
+                        <span class="fa fa-exclamation-triangle" aria-hidden="true"></span>
+                        It looks like this aggregator draws data from columns that exist in lists that you may not be authorised to access.
+                        You may not be able to configure this aggregator properly.
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    {% elif vars.aggregator_mode != 'crosslist' %}
+        {% if vars.referenced_table_uuids|length > 1 %}
+            <div class="row">
+                <div class="col-sm-12">
+                    <div class="alert alert-danger">
+                        <span class="fa fa-exclamation-triangle" aria-hidden="true"></span>
+                        The active aggregation method for this aggregator seems to draw data from columns that exist in different lists.
+                        To properly manipulate these columns, you should be working in cross-list mode.
+                        <a href="{{ url_for('table.edit_column', table_uuid=table_uuid, column_uuid=column.config.uuid, mode='crosslist') }}">Edit in cross-list mode</a>.
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+        {% if vars.referenced_table_uuids|length != vars.referenced_table_uuids_all_methods|length %}
+            <div class="row">
+                <div class="col-sm-12">
+                    <div class="alert alert-warning">
+                        <span class="fa fa-exclamation-circle" aria-hidden="true"></span>
+                        One of the inactive (i.e. not currently selected) aggregation methods appears to draw data from columns that exist in other lists.
+                        This won't impact on the aggregation calculation itself but you may want to resolve this, such as by removing the reference(s) or
+                        <a href="{{ url_for('table.edit_column', table_uuid=table_uuid, column_uuid=column.config.uuid, mode='crosslist') }}">editing this aggregator in cross-list mode</a>.
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    {% endif %}
+    {% if vars.source_collective_asset and vars.source_collective_asset.original_referenced_columns %}
+		<div class="row">
+			<div class="col-sm-12">
+				<div class="alert alert-info">
+                    <span class="fa fa-exclamation-triangle" aria-hidden="true"></span>
+                    This aggregator column appears to have been copied from the SRES Collective.
+                    In the copying process, we have tried to re-map these columns so that they reflect current columns.
+                    You will need to check the columns to which this aggregator column refers, and then save this aggregator column.
+                    These are the column names present in the original aggregator column that was shared to the Collective.
+                    You may want to check that the current configuration refers to the same or similar columns.
+                    <ul>
+                        {% for col in vars.source_collective_asset.original_referenced_columns %}
+                            <li>
+                                {{ col.display_text }}
+                            </li>
+                        {% endfor %}
+                    </ul>
+				</div>
+			</div>
+		</div>
+    {% endif %}
+    <div class="row">
+        <div class="col">
+            <form action="{{ url_for('table.edit_column', table_uuid=table_uuid, column_uuid=column.config.uuid, mode=vars.aggregator_mode) }}" id="edit_aggregator_form" method="POST" data-sres-role="main_form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                {% if vars.collective_sharing %}
+                    {{ collective_share.render_collective_metadata_fields(vars.collective_sharing_asset, select_users, vars.collective_sharing_mode, 'column', vars) }}
+                {% endif %}
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Column name</label>
+                    <div class="col-sm-10">
+                        <input type="text" name="columnname" value="{{ request.form.columnname or column.config.name }}" class="form-control" required>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Column description</label>
+                    <div class="col-sm-10">
+                        <input type="text" name="columndescription" value="{{ request.form.columndescription or column.config.description }}" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Aggregation method</label>
+                    <div class="col-sm-10">
+                        <div class="row">
+                            <div class="col">
+                                <div class="card mb-3" id="panel_aggregators_simple">
+                                    <div class="card-header" data-toggle="collapse" data-target="#panel_aggregators_simple_collapse" aria-expanded="true" aria-controls="">
+                                        <span class="fa fa-cubes"></span> Simple aggregators
+                                    </div>
+                                    <div id="panel_aggregators_simple_collapse" class="collapse {% if vars.mode == 'new' or vars.simple_aggregator_used %}show{% endif %}" aria-labelledby="">
+                                        <div class="card-body">
+                                            <div class="row">
+                                                <div class="col">
+                                                    <h6>
+                                                        Choose columns to aggregate (source columns)
+                                                        <button type="button" class="btn btn-xs btn-outline-secondary sres-list-chooser-show-chooser"><span class="fa fa-table"></span> Choose lists</button>
+                                                    </h6>
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col">
+                                                    <select id="select_attributes" multiple="multiple" name="select_attributes" class="sres-multiselect-dynamic-column-receiver">
+                                                        {% for table_instance in vars.authorised_tables_instances %}
+                                                            {% for column_to_show in table_instance.get_select_array(show_collapsed_multientry_option=true) %}
+                                                                <option value="{{ column_to_show.value }}">{{ column_to_show.full_display_text}}</option>
+                                                            {% endfor %}
+                                                        {% endfor %}
+                                                        {% if vars.available_columns_from_collective_asset %}
+                                                            {% for column_to_show in vars.available_columns_from_collective_asset %}
+                                                                <option value="{{ column_to_show.value }}">{{ column_to_show.display_text}}</option>
+                                                            {% endfor %}
+                                                        {% endif %}
+                                                    </select>
+                                                    <input type="hidden" name="select_attributes_columns_ordered" 
+                                                        value="{{ request.form.select_attributes_columns_ordered or column.config.aggregation_options.attributes|jsondump }}">
+                                                </div>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-sm-12">
+                                                    <br>
+                                                    <h6>Choose an aggregation method for the selected columns</h6>
+                                                    {% for simple_aggregator in vars.SIMPLE_AGGREGATORS %}
+                                                        <div class="col-sm-12 alert alert-secondary">
+                                                            <div class="form-check">
+                                                                <input type="radio" class="form-check-input" name="aggregator_type" id="aggregator_type_simple_{{ simple_aggregator.name }}" 
+                                                                    value="{{ simple_aggregator.name }}" required 
+                                                                    {% if column.config.aggregation_options.method == simple_aggregator.name %}checked{% endif %}>
+                                                                <label for="aggregator_type_simple_{{ simple_aggregator.name }}" class="form-check-label">
+                                                                    {{ simple_aggregator.display }}
+                                                                    <span class="text-muted">{{ simple_aggregator.hint }}</span>
+                                                                </label>
+                                                            </div>
+                                                            {% if simple_aggregator.parameters %}
+                                                                <div class="d-none sres-aggregator-parameters form-group">
+                                                                    {% for parameter in simple_aggregator.parameters %}
+                                                                        {% set current_value = column.config.aggregation_options['aggregator_type_simple_' + simple_aggregator.name + '_parameter_' + parameter.name] %}
+                                                                        <label for="aggregator_type_simple_{{ simple_aggregator.name }}_parameter_{{ parameter.name }}">{{ parameter.display }}</label>
+                                                                        &nbsp;
+                                                                        <input type="text" class="form-control" name="aggregator_type_simple_{{ simple_aggregator.name }}_parameter_{{ parameter.name }}" id="aggregator_type_simple_{{ simple_aggregator.name }}_parameter_{{ parameter.name }}" value="{{ current_value }}">
+                                                                    {% endfor %}
+                                                                </div>
+                                                            {% endif %}
+                                                        </div>
+                                                    {% endfor %}
+                                                    <div class="col-sm-12 alert alert-secondary">
+                                                        <div class="form-check">
+                                                            <input type="radio" name="aggregator_type" id="aggregator_type_mapper" class="form-check-input"
+                                                                value="mapper" {% if column.config.aggregation_options.method == 'mapper' %}checked{% endif %}>
+                                                            <label for="aggregator_type_mapper" class="form-check-label">
+                                                                Mapper
+                                                                <span class="text-muted">Maps input to output from a list of input and output values.</span>
+                                                            </label>
+                                                        </div>
+                                                        <div class="d-none sres-aggregator-parameters row">
+                                                            <div class="col">
+                                                                <div class="mt-2">
+                                                                    The two lists must be the same length. Only one source column can be used as the input.
+                                                                </div>
+                                                                <div class="row">
+                                                                    <div class="col">
+                                                                        <label>Input values</label> <span class="text-muted">(<span id="aggregator_type_mapper_inputs_line_count"></span> lines)</span>
+                                                                        <br>
+                                                                        <textarea name="aggregator_type_mapper_inputs" class="form-control sres-aggregator-mapper sres-aggregator-mapper-inputs" rows="10">{{ request.form.aggregator_type_mapper_inputs or column.config.aggregation_options.aggregator_type_mapper_inputs|join('\n') }}</textarea>
+                                                                    </div>
+                                                                    <div class="col">
+                                                                        <label>Output values</label> <span class="text-muted">(<span id="aggregator_type_mapper_outputs_line_count"></span> lines)</span>
+                                                                        <br>
+                                                                        <textarea name="aggregator_type_mapper_outputs" class="form-control sres-aggregator-mapper sres-aggregator-mapper-outputs" rows="10">{{ request.form.aggregator_type_mapper_outputs or column.config.aggregation_options.aggregator_type_mapper_outputs|join('\n') }}</textarea>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>            
+                        </div>            
+                        <div class="row">
+                            <div class="col">
+                                <div class="card mb-3" id="panel_aggregators_advanced">
+                                    <div class="card-header" data-toggle="collapse" data-target="#panel_aggregators_advanced_collapse" aria-expanded="true" aria-controls="">
+                                        <span class="fa fa-cubes"></span> Advanced aggregators
+                                    </div>
+                                    <div id="panel_aggregators_advanced_collapse" class="collapse show" aria-labelledby="">
+                                        <div class="card-body">
+                                            <div class="row">
+                                                <div class="col-sm-12">
+                                                    <h6>Choose an advanced aggregation method</h6>
+                                                    <div class="col-sm-12 alert alert-secondary">
+                                                        <div class="form-check">
+                                                            <input type="radio" name="aggregator_type" id="aggregator_type_mathematical_operations" class="form-check-input"
+                                                                value="mathematical_operations" 
+                                                                {% if column.config.aggregation_options['method'] == 'mathematical_operations' %}checked{% endif %}>
+                                                            <label for="aggregator_type_mathematical_operations" class="form-check-label">
+                                                                Mathematical operations
+                                                                <span class="text-muted">Simple mathematical operations + - * / ( )</span>
+                                                            </label>
+                                                        </div>
+                                                        <div class="d-none sres-aggregator-parameters row mt-3">
+                                                            <div class="col">
+                                                                <div class="alert alert-info">
+                                                                    Note that in this version of SRES, SQL commands can no longer be used.
+                                                                    The formula below must be a standard mathematical equation.
+                                                                    Ultra-advanced users can refer to the <a href="http://www.partow.net/programming/exprtk/index.html" target="_blank">ExprTk documentation</a> for additional expressions.
+                                                                </div>
+                                                                <label for="aggregator_type_mathematical_operations_formula">Formula</label>
+                                                                <div name="aggregator_type_mathematical_operations_formula" id="aggregator_type_mathematical_operations_formula" 
+                                                                    class="sres-tinymce-editor tinymce-code-only bg-white border rounded sres-quickinfo-editor">{{ (request.form.aggregator_type_mathematical_operations_formula or column.config.aggregation_options.aggregator_type_mathematical_operations_formula)|safe }}</div>
+                                                                <label class="mt-2">Insert columns or operators into formula</label>
+                                                                <br />
+                                                                <button type="button" class="btn btn-light" id="aggregator_mathematical_operations_button_operator_plus"> + </button>
+                                                                <button type="button" class="btn btn-light" id="aggregator_mathematical_operations_button_operator_subtract"> - </button>
+                                                                <button type="button" class="btn btn-light" id="aggregator_mathematical_operations_button_operator_multiply"> * </button>
+                                                                <button type="button" class="btn btn-light" id="aggregator_mathematical_operations_button_operator_divide"> / </button>
+                                                                <button type="button" class="btn btn-light" id="aggregator_mathematical_operations_button_operator_parentheses"> (  ) </button>
+                                                                <button type="button" class="btn btn-light" id="aggregator_mathematical_operations_button_column">Insert column</button>
+                                                                <button type="button" class="btn btn-light sres-translate-column-references float-right" data-sres-current-mode="design" data-sres-uuid="{{ column.config.uuid }}">Show friendly column names</button>
+                                                                <button type="button" class="btn btn-light float-right mr-2" id="aggregator_mathematical_operations_button_validate">Check formula</button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-sm-12 alert alert-secondary">
+                                                        <input type="hidden" name="aggregator_type_case_builder_cases" />
+                                                        <input type="hidden" name="aggregator_type_case_builder_case_conditions" />
+                                                        <div class="form-check">
+                                                            <input type="radio" name="aggregator_type" id="aggregator_type_case_builder" class="form-check-input"
+                                                                value="case_builder" {% if column.config.aggregation_options.method == 'case_builder' %}checked{% endif %}>
+                                                            <label for="aggregator_type_case_builder" class="form-check-label">
+                                                                Case builder
+                                                                <span class="text-muted">Conditionally transform data based on 'cases' that lead to particular outputs</span>
+                                                            </label>
+                                                        </div>
+                                                        <div class="d-none sres-aggregator-parameters row">
+                                                            <div class="col-sm-12 mt-2">
+                                                                <div class="alert alert-light">
+                                                                    <button type="button" class="btn btn-light" id="add_case"><span class="fa fa-plus"></span> Add case</button>
+                                                                </div>
+                                                            </div>
+                                                            <div id="cases_container" class="col-sm-12">
+                                                                <!--- template case --->
+                                                                <div id="case_template" class="d-none">
+                                                                    <div class="card case-panel mb-3">
+                                                                        <div class="card-header case-heading">
+                                                                            <span class="case-title">Case</span>
+                                                                            <button type="button" class="btn btn-xs btn-default float-right" id="case_delete-case-x">
+                                                                                <span class="fa fa-trash"></span>
+                                                                            </button>
+                                                                        </div>
+                                                                        <div class="card-body">
+                                                                            <h6>Yield the following data</h6>
+                                                                            <div class="border rounded p-2 mb-3 tinymce-basic-oneline" id="case_content-case-x" name="case_content-case-x"></div>
+                                                                            <h6>
+                                                                                When these condition(s) are met
+                                                                                <label class="float-right">
+                                                                                    or
+                                                                                    <input type="checkbox" name="case_conditions_default-case-x" id="case_conditions_default-case-x" />
+                                                                                    in the default case
+                                                                                </label>
+                                                                            </h6>
+                                                                            <div id="builder-basic-case-x" class="sres-querybuilder-container"></div>
+                                                                            <input type="hidden" name="rules-for-builder-basic-case-x" id="rules-for-builder-basic-case-x">
+                                                                        </div>
+                                                                    </div>
+                                                                </div><!--- /#case_template --->
+                                                            </div><!--- /#cases_container --->
+                                                            <script>
+                                                                var caseBuilderCases = {{ aggregator_column.get_case_builder_cases()|tojson }}
+                                                            </script>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-sm-12 alert alert-secondary">
+                                                        <div class="form-check">
+                                                            <input type="radio" name="aggregator_type" id="aggregator_type_self_peer_review" class="form-check-input"
+                                                                value="self_peer_review" 
+                                                                {% if column.config.aggregation_options['method'] == 'self_peer_review' %}checked{% endif %}>
+                                                            <label for="aggregator_type_self_peer_review" class="form-check-label">
+                                                                Self and peer review calculations
+                                                                <span class="text-muted">Calculate metrics related to self and peer review</span>
+                                                            </label>
+                                                        </div>
+                                                        <div class="d-none sres-aggregator-parameters row mt-3">
+                                                            <div class="col-sm-12">
+                                                                <div class="alert alert-info">
+                                                                    While SRES can calculate some metrics relating to self and peer review, it was not built specifically to handle self and peer review.
+                                                                    For more on self and peer review, including purpose-built tools, see <a href="https://doi.org/10.1080/03043797.2010.490577" target="_blank">Willey and Gardner (2010)</a>,
+                                                                    <a href="https://sparkplus.com.au/" target="_blank">SPARK<sup>PLUS</sup></a>, and <a href="https://webpaproject.com/" target="_blank">WebPA</a>.
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-sm-12">
+                                                                <div class="form-group">
+                                                                    <label for="aggregator_type_self_peer_review_grouping_column">Grouping column</label>
+                                                                    <select id="aggregator_type_self_peer_review_grouping_column" name="aggregator_type_self_peer_review_grouping_column">
+                                                                        {% for col in vars.select_array if not col.base_column_uuid %}
+                                                                            <option value="{{ col.value }}" {% if column.config.aggregation_options.aggregator_type_self_peer_review_grouping_column == col.value %}selected{% endif %}>{{ col.full_display_text }}</option>
+                                                                        {% endfor %}
+                                                                    </select>
+                                                                </div>
+                                                                <div class="form-group">
+                                                                    <label for="aggregator_type_self_peer_review_score_column">
+                                                                        Score column
+                                                                        <span class="text-muted">This must be the column or subfield in a column that receives the self and peer review scores</span>
+                                                                    </label>
+                                                                    <select id="aggregator_type_self_peer_review_score_column" name="aggregator_type_self_peer_review_score_column">
+                                                                        {% for col in vars.select_array %}
+                                                                            <option value="{{ col.value }}" {% if column.config.aggregation_options.aggregator_type_self_peer_review_score_column == col.value %}selected{% endif %}>{{ col.full_display_text }}</option>
+                                                                        {% endfor %}
+                                                                    </select>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Recalculation trigger</label>
+                    <div class="col-sm-10">
+                        <select name="recalculate_trigger" class="form-control">
+                            <option value="manual">No automatic recalculation, only manually triggered</option>
+                            <option value="onset" {% if 'onset' in (request.form.recalculate_trigger or column.config.aggregation_options.recalculate_trigger) %}selected{% endif %}>When data in source columns are updated</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Simple post-aggregation arithmetic</label>
+                    <div class="col-sm-10 form-inline">
+                        After aggregation, apply simple arithmetic:
+                        <select name="post_aggregation_arithmetic_operator" class="form-control ml-2">
+                            <option value="">(not used)</option>
+                            {% for operator in ['+', '-', '*', '/'] %}
+                                <option value="{{ operator }}" {% if (request.form.post_aggregation_arithmetic_operator or column.config.aggregation_options.post_aggregation_arithmetic_operator) == operator %}selected{% endif %}>
+                                    {{ operator }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <input type="text" class="form-control ml-2" placeholder="number" name="post_aggregation_arithmetic_value" value="{{ request.form.post_aggregation_arithmetic_value or column.config.aggregation_options.post_aggregation_arithmetic_value }}">
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Rounding</label>
+                    <div class="col-sm-10 form-inline">
+                        After calculation, round
+                        <select name="post_calculation_rounding_direction" class="form-control ml-2 mr-2">
+                            {% for direction in [('nearest', 'to'), ('floor', 'down to'), ('ceiling', 'up to'), ] %}
+                                <option value="{{ direction[0] }}" {% if (request.form.post_calculation_rounding_direction or column.config.aggregation_options.rounding_direction) == direction[0] %}selected{% endif %}>
+                                    {{ direction[1] }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        the nearest
+                        <select name="post_calculation_rounding" class="form-control ml-2">
+                            <option value="">(rounding disabled)</option>
+                            <option value="0" {% if (request.form.post_calculation_rounding or column.config.aggregation_options.rounding) == "0" %}selected{% endif %}>integer</option>
+                            {% for dp in range(1,11) %}
+                                <option value="{{ dp }}" {% if (request.form.post_calculation_rounding or column.config.aggregation_options.rounding) == dp|string %}selected{% endif %}>
+                                    {{ dp }} decimal place{% if dp > 1 %}s{% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <a data-toggle="collapse" href="javascript:void(0);" data-target="#advanced_options" id="advanced_options_toggler">Advanced settings <span class="fa fa-angle-down"></span></a>
+                <div id="advanced_options" class="collapse mt-2">
+                    <div class="row form-group">
+                        <label class="col-sm-2 col-form-label sres-form-label">Handling blank values</label>
+                        <div class="col-sm-10 form-inline">
+                            If a blank value is encountered:
+                            <select name="aggregation_options_blank_handling" id="aggregation_options_blank_handling" class="form-control ml-2">
+                                <option value="leave">Leave as-is (default)</option>
+                                <option value="zero" {% if (request.form.aggregation_options_blank_handling or column.config.aggregation_options.blank_handling) == "zero" %}selected{% endif %}>Convert to zero</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row form-group">
+                        <label class="col-sm-2 col-form-label sres-form-label">Additional aggregation axis</label>
+                        <div class="col-sm-10 form-group">
+                            <div>
+                                Calculate aggregation along which axis/axes?
+                                <span class="fa fa-exclamation-circle" data-tippy-content="This setting only applies to simple aggregators"></span>
+                            </div>
+                            <div class="form-check mt-2">
+                                <input type="checkbox" class="form-check-input" disabled readonly checked>
+                                <label class="form-check-label">
+                                    <span class="fa fa-arrows-alt-h"></span> <strong>x</strong>
+                                    <span class="text-muted">This is always enabled and allows aggregation of the selected column(s) across a row</span>
+                                </label>
+                            </div>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" value="t" name="aggregation_axis_t" id="aggregation_axis_t"
+                                    {% if (request.form['aggregation_axis_t'] or 't' in column.config.aggregation_options.axes) %}checked{% endif %}>
+                                <label class="form-check-label" for="aggregation_axis_t">
+                                    <span class="fa fa-history"></span> <strong>t</strong>
+                                    <span class="text-muted">Aggregate through time (i.e. by change history records)</span>
+                                </label>
+                            </div>
+                            <div class="collapse sres-aggregator-axis-t-config ml-3">
+                                <div class="form-inline mt-2">
+                                    <label>t-axis aggregation source data</label>
+                                    <select name="aggregation_axis_t_source" class="form-control ml-2">
+                                        <option value="all">All records</option>
+                                        <option value="earliest" {% if (request.form.aggregation_axis_t_source or column.config.aggregation_options.t_axis_source) == 'earliest' %}selected{% endif %}>Only the earliest record</option>
+                                        <option value="latest" {% if (request.form.aggregation_axis_t_source or column.config.aggregation_options.t_axis_source) == 'latest' %}selected{% endif %}>Only the latest (most recent) record</option>
+                                        <option value="user_earliest" {% if (request.form.aggregation_axis_t_source or column.config.aggregation_options.t_axis_source) == 'user_earliest' %}selected{% endif %}>Only the earliest record by each user</option>
+                                        <option value="user_latest" {% if (request.form.aggregation_axis_t_source or column.config.aggregation_options.t_axis_source) == 'user_latest' %}selected{% endif %}>Only the latest (most recent) record by each user</option>
+                                    </select>
+                                </div>
+                                <div class="form-inline mt-2">
+                                    <label>t-axis aggregation - limit source data by date</label>
+                                    <select name="aggregation_axis_t_source_limit" class="form-control ml-2">
+                                        <option value="no">Do not limit (consider all records)</option>
+                                        <option value="between" {% if (request.form.aggregation_axis_t_source_limit or column.config.aggregation_options.t_axis_source_limit) == 'between' %}selected{% endif %}>Only consider records between specified dates</option>
+                                    </select>
+                                    <span class="collapse sres-aggregator-axis-t-source-limit-config">
+                                        <input type="date" name="aggregation_axis_t_source_limit_date_from" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" placeholder="yyyy-mm-dd" class="form-control ml-2" value="{{ column.config.aggregation_options.t_axis_source_limit_from|datetime }}">
+                                        <input type="time" step="1" name="aggregation_axis_t_source_limit_time_from" pattern="([01]\d|2[0-3]):([0-5]\d):([0-5]\d)" placeholder="hh:mm:ss" class="form-control ml-2 mr-2" value="{{ column.config.aggregation_options.t_axis_source_limit_from|datetime(format='hms') }}">
+                                        to
+                                        <input type="date" name="aggregation_axis_t_source_limit_date_to" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" placeholder="yyyy-mm-dd" class="form-control ml-2" value="{{ column.config.aggregation_options.t_axis_source_limit_to|datetime }}">
+                                        <input type="time" step="1" name="aggregation_axis_t_source_limit_time_to" pattern="([01]\d|2[0-3]):([0-5]\d):([0-5]\d)" placeholder="hh:mm:ss" class="form-control ml-2" value="{{ column.config.aggregation_options.t_axis_source_limit_to|datetime(format='hms') }}">
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" value="r" name="aggregation_axis_r" id="aggregation_axis_r"
+                                    {% if (request.form['aggregation_axis_r'] or 'r' in column.config.aggregation_options.axes) %}checked{% endif %}>
+                                <label class="form-check-label" for="aggregation_axis_r">
+                                    <span class="fa fa-copy"></span> <strong>r</strong>
+                                    <span class="text-muted">Aggregate through multiple reports</span>
+                                    <span class="fa fa-exclamation-circle" data-tippy-content="This setting only applies when source column(s) have multiple report mode enabled, and is used instead of the t axis"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row form-group">
+                        <label class="col-sm-2 col-form-label sres-form-label">Substitutions</label>
+                        <div class="col-sm-10 form-inline">
+                            After aggregation, replace all occurrences of
+                            <input type="text" class="form-control ml-2 mr-2" name="regex_replace_pattern" value="{{ request.form.regex_replace_pattern or column.config.aggregation_options.regex_replace_pattern }}">
+                            <select name="regex_replace_mode" class="form-control mr-2">
+                                <option value="text">(standard text)</option>
+                                <option value="regex" {% if (request.form.regex_replace_mode or column.config.aggregation_options.regex_replace_mode) == "regex" %}selected{% endif %}>(regular expression)</option>
+                            </select>
+                            with
+                            <input type="text" class="form-control ml-2" name="regex_replace_replacement" value="{{ column.config.aggregation_options.regex_replace_replacement }}">
+                        </div>
+                    </div>
+                    <div class="row form-group">
+                        <label class="col-sm-2 col-form-label sres-form-label">HTML</label>
+                        <div class="col-sm-10 form-inline">
+                            Allow raw HTML when substituting data fields
+                            <select name="custom_options_allow_html" id="custom_options_allow_html" class="form-control ml-2">
+                                <option value="false">No (clean all HTML - recommended)</option>
+                                <option value="strip" {% if (request.form.custom_options_allow_html or column.config.custom_options.allow_html) == "strip" %}selected{% endif %}>No (strip all HTML tags)</option>
+                                <option value="true" {% if (request.form.custom_options_allow_html or column.config.custom_options.allow_html) == "true" %}selected{% endif %}>Yes (do not clean HTML when substituting)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label">&nbsp;</label>
+                    <div class="col-sm-10">
+                        <input type="hidden" name="action" value="{{ vars.mode }}_aggregator">
+                        {% if not vars.collective_sharing %}
+                            <input type="submit" name="submit_button" value="Save" class="btn btn-primary" />
+                            {% if vars.mode == 'edit' %}
+                                <button type="button" class="btn btn-outline-primary sres-aggregator-recalculate-now">
+                                    <span class="fa fa-calculator"></span> Recalculate now for all students
+                                </button>
+                                <a href="{{ url_for('table.clone_column', table_uuid=table_uuid, column_uuid=column.config.uuid) }}" class="btn btn-outline-primary">
+                                    <span class="fa fa-clone"></span> Clone
+                                </a>
+                                <a href="{{ url_for('collective.share_asset', asset_type='aggregatorcolumn', source_asset_uuid=column.config.uuid) }}" role="button" class="btn btn-outline-primary">
+                                    <span class="fa fa-share-alt"></span> Share to SRES Collective
+                                </a>
+                                <button type="button" name="delete_button" class="btn btn-outline-danger">
+                                    <span class="fa fa-trash"></span> Delete column
+                                </button>
+                            {% endif %}
+                        {% else %}
+                            {{ collective_share.render_collective_action_buttons(vars.collective_sharing_asset, vars.collective_sharing_mode, vars) }}
+                        {% endif %}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    {{ select_users.find_user() }}
+    {{ select_users.bulk_edit_users() }}
+    
+    {% import 'select-column.html' as select_column %}
+    {{ select_column.column_chooser(
+        available_tables=vars.authorised_tables,
+        student_info_items=vars.SYSTEM_COLUMNS,
+        current_table_uuid=table_uuid,
+        only_table_uuids=([] if vars.aggregator_mode == 'crosslist' else [table_uuid])
+    ) }}
+    
+    <!-- modal for delete column -->
+    <div class="modal fade" id="confirm_delete" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Are you sure?</h4>
+                </div>
+                <div class="modal-body">
+                    <span class="fa fa-exclamation-triangle" aria-hidden="true"></span>
+                    Warning: all data currently in this column will be <strong>lost permanently</strong> if you proceed.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Do not delete</button>
+                    <a id="deleteButton" class="btn btn-danger" href="{{ url_for('table.delete_column', table_uuid=table_uuid, column_uuid=column.config.uuid) }}">Confirm delete</a>
+                </div>
+            </div>
+        </div>
+    </div>	
+
+    <!--- progressbar modal --->
+    {% include 'modal-progress.html' %}
+    
+    <script>
+        $(document).ready(function(){
+            waitingDialog.hide();
+        });
+    </script>
+    
+{% endblock %}

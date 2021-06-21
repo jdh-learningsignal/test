@@ -1,0 +1,1488 @@
+{% extends 'base-staff.html' %}
+
+{% import 'collective-share.html' as collective_share %}
+{% import 'select-users.html' as select_users %}
+{% import 'jump-column.html' as jump_column %}
+
+{% if vars.collective_sharing and vars.collective_sharing_mode == 'show' %}
+    {% set table_uuid = 'collective' %}
+{% else %}
+    {% set table_uuid = table.config.uuid %}
+{% endif %}
+
+{% block title %}
+    {% if vars.collective_sharing %}
+        {{ collective_share.show_title(vars.collective_sharing_mode, 'column', vars.collective_sharing_asset.config.name) }}
+    {% else %}
+        {% if vars.mode == 'new' %}
+            New column
+        {% elif vars.mode == 'edit' %}
+            Edit column - {{ column.config.name }}
+        {% endif %}
+    {% endif %}
+{% endblock %}
+
+{% block head_css2 %}
+    <style>
+        .sres-multientry-label {
+            padding: 0.5rem;
+        }
+        .sres-quickinfo-editor {
+            padding: 0.5rem;
+        }
+        .sres-multientry-handle {
+            cursor: grab;
+        }
+        .sres-tinymce-editor {
+            padding: 0.5rem;
+        }
+    </style>
+{% endblock %}
+
+{% block head_js2 %}
+    {% raw %}
+        <script id="render_calculated_values_editor_subfield_list_item" type="text/x-handlebars-template">
+            <div class="row mt-2 sres-render-calculated-values-editor-list-item">
+                <div class="col-sm-9">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" value="{{subfield}}" id="render_calculated_values_editor_subfield_list_item_{{subfield}}" data-sres-key="subfields">
+                        <label class="form-check-label" for="render_calculated_values_editor_subfield_list_item_{{subfield}}">{{label}}</label>
+                    </div>
+                </div>
+                <div class="col-sm-3">
+                    <input type="number" title="Multiplier" value="1" class="ml-1 form-control form-control-sm" id="render_calculated_values_editor_subfield_list_item_multiplier_{{subfield}}">
+                </div>
+            </div>
+        </script>
+    {% endraw %}
+    <script src="{{ url_for('static', filename='js/tinymce/tinymce.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tinymce/jquery.tinymce.min.js') }}"></script>
+    <script>
+        ENV['FONT_FORMATS'] = "{{ vars.FONT_FORMATS }}";
+        ENV['FILE_UPLOAD_ENDPOINT'] = "{{ url_for('file.upload_file') }}";
+    </script>
+	<script>
+		// basic
+        let tinymceBasicToolbar = ['bold, italic, underline, strikethrough, styleselect, fontselect, fontsizeselect | forecolor, backcolor', 'cut, copy, paste | bullist, numlist, outdent, indent | undo, redo, removeformat | subscript, superscript | link unlink | image | code searchreplace'];
+		let basicConfig = {
+			selector: '.tinymce-basic',
+			toolbar: tinymceBasicToolbar,
+			menubar: false,
+			inline: true,
+			statusbar: true,
+			plugins: 'code lists textcolor colorpicker paste link image searchreplace',
+            images_upload_url: ENV['FILE_UPLOAD_ENDPOINT'],
+            images_upload_base_path: '',
+			relative_urls: false,
+			remove_script_host: false,
+			convert_urls: false
+		};
+        if (ENV['FONT_FORMATS']) {
+            basicConfig['font_formats'] = ENV['FONT_FORMATS'];
+        }
+        tinymce.init(basicConfig);
+        // basic one liner
+		let tinymceBasicOneLineToolbar = ['bold, italic, underline, strikethrough, styleselect, fontselect, fontsizeselect | forecolor, backcolor', 'cut, copy, paste | undo, redo, removeformat | subscript, superscript | link unlink | image | code searchreplace'];
+        let basicConfigOneline = {
+			selector: '.tinymce-basic-oneline',
+			toolbar: tinymceBasicOneLineToolbar,
+			menubar: false,
+			inline: true,
+			statusbar: true,
+			plugins: 'code textcolor colorpicker paste link image searchreplace',
+            images_upload_url: ENV['FILE_UPLOAD_ENDPOINT'],
+            images_upload_base_path: '',
+			forced_root_block: '',
+			relative_urls: false,
+			remove_script_host: false,
+			convert_urls: false
+		};
+        if (ENV['FONT_FORMATS']) {
+            basicConfigOneline['font_formats'] = ENV['FONT_FORMATS'];
+        }
+		tinymce.init(basicConfigOneline);
+	</script>
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.column-edit.js', rand=range(1000,9999)|random|string) }}"></script>
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col">
+            <h1>
+                {% if vars.collective_sharing %}
+                    {{ collective_share.show_title(vars.collective_sharing_mode, 'column', vars.collective_sharing_asset.config.name) }}
+                {% else %}
+                    {% if vars.mode == 'edit' %}
+                        Edit column {{ column.config.name }}
+                    {% elif vars.mode == 'new' %}
+                        Create new column
+                    {% endif %}
+                {% endif %}
+            </h1>
+        </div>
+    </div>
+    
+    {% if column.config.datasource.mode == 'sync' %}
+        <div class="row">
+            <div class="col">
+                <div class="alert alert-warning">
+                    <span class="fa fa-exclamation-triangle"></span>
+                    This column seems to be automatically synchronised from elsewhere. Because of this, any changes you make here may be overwritten the next time the synchronisation occurs.
+                </div>
+            </div>
+        </div>
+    {% endif %}
+    
+    <main>
+    
+    <div class="row">
+        <div class="col">
+            <form method="post" action="{{ url_for('table.edit_column', table_uuid=table_uuid, column_uuid=column.config.uuid) }}" id="editColumnForm" onSubmit="javascript:serialize_multi_entry();" data-sres-role="main_form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                {% if vars.collective_sharing %}
+                    {{ collective_share.render_collective_metadata_fields(vars.collective_sharing_asset, select_users, vars.collective_sharing_mode, 'column', vars) }}
+                {% else %}
+                    <div class="form-group row">
+                        <div class="col-sm-8">
+                            <label class="sres-form-label">In {{ table.config.code }} {{ table.config.name }} ({{ table.config.year }} semester {{ table.config.semester }})</label>
+                        </div>
+                        <div class="col-sm-4">
+                            {{ jump_column.column_jumper(vars.other_available_columns, url_for('table.edit_column', table_uuid=table_uuid, column_uuid='__column_uuid__')) }}
+                        </div>
+                    </div>
+                {% endif %}
+                {% if vars.mode == 'new' %}
+                    <p><input type="checkbox" data-toggle="toggle" data-off="Create single column" data-on="Bulk create columns" name="toggle_bulk_add_mode" data-width="200" data-onstyle="warning" /></p>
+                {% endif %}
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label" for="columnname">Column name</label>
+                    <div class="col-sm-10">
+                        <div class="sres-add-single">
+                            <input type="text" name="columnname" id="columnname" value="{{ request.form.columnname or column.config.name }}" required class="form-control" data-sres-required />
+                        </div>
+                        <div class="sres-add-bulk form-group d-none">
+                            <label for="bulk_columnname_pattern">Name pattern</label> Use <code>$N$</code> to specify placement of number. Simple mathematical operations are allowed e.g. <code>$N-1$</code> or <code>$N+2$</code>.
+                            <input type="text" name="bulk_columnname_pattern" id="bulk_columnname_pattern" class="form-control" placeholder="e.g. Week $N$ feedback" data-sres-required>
+                        </div>
+                        <div class="sres-add-bulk form-inline d-none">
+                            <label for="bulk_columnname_increment_start">Numbering starts from</label>
+                            <input type="number" name="bulk_columnname_increment_start" id="bulk_columnname_increment_start" class="form-control m-2" value="1" min="1">
+                            <label for="bulk_columnname_increment_step">, increments by</label>
+                            <input type="number" name="bulk_columnname_increment_step" id="bulk_columnname_increment_step" class="form-control m-2" value="1" min="1">
+                            <label for="bulk_columnname_increment_occurrences">, and ends after</label>
+                            <input type="number" name="bulk_columnname_increment_occurrences" id="bulk_columnname_increment_occurrences" class="form-control m-2" value="1" min="1">
+                            occurrences
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label" for="columndescription">Column description</label>
+                    <div class="col-sm-10">
+                        <input type="text" name="columndescription" id="columndescription" value="{{ request.form.columndescription or column.config.description }}" class="form-control" />
+                    </div>
+                </div>
+                <div class="form-group row" id="panel_active_dates">
+                    <label class="col-sm-2 col-form-label sres-form-label">Active</label>
+                    <div class="col-sm-10">
+                        <div class="sres-add-single form-inline">
+                            <label>From</label>
+                            <span class="input-group m-2">
+                                <input type="date" name="activefrom" id="activefrom" aria-label="Active from date" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" placeholder="yyyy-mm-dd" value="{{ (request.form.activefrom or column.config.active.from)|datetime }}" required data-sres-required class="form-control" autocomplete="off" /> 
+                                <div class="input-group-append">
+                                    <button type="button" class="btn btn-outline-secondary sres-date-shortcut sres-date-shortcut-today">Now</button>
+                                    <button type="button" class="btn btn-outline-secondary sres-date-shortcut sres-date-shortcut-monday">Mon</button>
+                                    <button type="button" class="btn btn-outline-secondary sres-date-shortcut sres-date-shortcut-plus7">+7</button>
+                                    <button type="button" class="btn btn-outline-secondary sres-date-shortcut sres-date-shortcut-minus7">-7</button>
+                                </div>
+                            </span>
+                            <input type="time" step="1" name="active_from_time" id="active_from_time" aria-label="Active from time" pattern="([01]\d|2[0-3]):([0-5]\d):([0-5]\d)" placeholder="hh:mm:ss" value="{{ (request.form.active_from_time or column.config.active.from_time)|datetime(format='hms') }}" required data-sres-required class="form-control m-2" autocomplete="off" /> 
+                            <label>to</label>
+                            <span class="input-group m-2">
+                                <input type="date" name="activeto" id="activeto" aria-label="Active to date" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" placeholder="yyyy-mm-dd" value="{{ (request.form.activeto or column.config.active.to)|datetime }}" required data-sres-required class="form-control" autocomplete="off" />
+                                <div class="input-group-append">
+                                    <button type="button" class="btn btn-outline-secondary sres-date-shortcut sres-date-shortcut-today">Now</button>
+                                    <button type="button" class="btn btn-outline-secondary sres-date-shortcut sres-date-shortcut-friday">Fri</button>
+                                    <button type="button" class="btn btn-outline-secondary sres-date-shortcut sres-date-shortcut-plus7">+7</button>
+                                    <button type="button" class="btn btn-outline-secondary sres-date-shortcut sres-date-shortcut-minus7">-7</button>
+                                </div>
+                            </span>
+                            <input type="time" step="1" name="active_to_time" id="active_to_time" aria-label="Active to time" pattern="([01]\d|2[0-3]):([0-5]\d):([0-5]\d)" placeholder="hh:mm:ss" value="{{ (request.form.active_to_time or column.config.active.to_time)|datetime(format='hms') }}" required data-sres-required class="form-control m-2 autocomplete="off" /> 
+                            inclusive
+                        </div>
+                        <div class="sres-add-bulk form-inline d-none">
+                            Active from
+                            <span class="input-group m-2">
+                                <input type="date" name="bulk_activefrom_start" size="8" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" placeholder="yyyy-mm-dd" class="form-control" value="{{ vars.now|datetime }}">
+                                <div class="input-group-append">
+                                    <button type="button" class="btn btn-outline-secondary sres-date-shortcut sres-date-shortcut-today">Now</button>
+                                    <button type="button" class="btn btn-outline-secondary sres-date-shortcut sres-date-shortcut-monday">Mon</button>
+                                    <button type="button" class="btn btn-outline-secondary sres-date-shortcut sres-date-shortcut-plus7">+7</button>
+                                    <button type="button" class="btn btn-outline-secondary sres-date-shortcut sres-date-shortcut-minus7">-7</button>
+                                </div>
+                            </span>
+                            , repeat every
+                            <input type="number" name="bulk_activefrom_stepdays" size="4" class="form-control m-2" value="7" min="1">
+                            days, and end after
+                            <input type="number" name="bulk_activefrom_occurrences" size="10" class="form-control m-2" value="1" min="1">
+                            occurrences. For each occurrence, column should remain active for
+                            <input type="number" name="bulk_activefrom_daysactive" size="4" class="form-control m-2" value="7" min="1">
+                            days, from
+                            <input type="time" step="1" name="bulk_active_from_time" id="bulk_active_from_time" pattern="([01]\d|2[0-3]):([0-5]\d):([0-5]\d)" placeholder="hh:mm:ss" value="{{ request.form.bulk_active_from_time or '00:00:00' }}" class="form-control m-2" autocomplete="off" /> 
+                            to
+                            <input type="time" step="1" name="bulk_active_to_time" id="bulk_active_to_time" pattern="([01]\d|2[0-3]):([0-5]\d):([0-5]\d)" placeholder="hh:mm:ss" value="{{ request.form.bulk_active_to_time or '23:59:59' }}" class="form-control m-2" autocomplete="off" /> 
+                            inclusive
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Quick info display</label>
+                    <div class="col-sm-10">
+                        <div class="row">
+                            <div class="col">
+                                <p class="text-muted">Display personalised information for each student when interacting with this column in different data entry modes</p>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col">
+                                <ul class="nav nav-tabs" role="tablist">
+                                    <li class="nav-item">
+                                        <a class="nav-link active" id="quickinfo_single_settings-tab" data-toggle="tab" href="#quickinfo_single_settings" role="tab" aria-controls="quickinfo_single_settings" aria-selected="true">Single data entry mode</a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link" id="quickInfoBulk-tab" data-toggle="tab" href="#quickinfo_bulk_settings" role="tab" aria-controls="quickinfo_bulk_settings" aria-selected="false">Bulk entry mode</a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link" id="quickinfo_rollview_settings-tab" data-toggle="tab" href="#quickinfo_rollview_settings" role="tab" aria-controls="quickinfo_rollview_settings" aria-selected="false">Roll view mode</a>
+                                    </li>
+                                </ul>
+                                <div class="tab-content">
+                                    <div class="tab-pane fade show active" id="quickinfo_single_settings" role="tabpanel" aria-labelledby="quickinfo_single_settings-tab">
+                                        <div name="quickInfo" id="quickInfo" class="sres-tinymce-editor tinymce-basic border-right border-bottom border-left rounded sres-quickinfo-editor">{{ (request.form.quickInfo or column.config.quick_info.single)|safe_no_script }}</div>
+                                        <button type="button" class="btn btn-sm btn-light sres-quickinfo-insert-field sres-disable-upon-translate-column-references" data-sres-field="column"><span class="fa fa-dollar-sign" aria-hidden="true"></span> Insert column reference</button>
+                                        <button type="button" class="btn btn-sm btn-light sres-quickinfo-insert-field sres-disable-upon-translate-column-references" data-sres-field="columnname" value="$COLUMNNAME$">Column name</button>
+                                        <button type="button" class="btn btn-sm btn-light sres-quickinfo-insert-field sres-disable-upon-translate-column-references" data-sres-field="columndescription" value="$COLUMNDESCRIPTION$">Column description</button>
+                                        <button type="button" class="btn btn-sm btn-light sres-quickinfo-insert-field sres-disable-upon-translate-column-references" data-sres-field="inactivewarning" value="$INACTIVEWARNING$">Warning if column is inactive</button>
+                                        <button type="button" class="btn btn-sm btn-light sres-multi-column-magic-formatter-insert sres-disable-upon-translate-column-references" data-sres-insert-target="quickInfo">
+                                            <span class="fa fa-layer-group" aria-hidden="true"></span> Insert multi-column magic formatter
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-light sres-translate-column-references" data-sres-current-mode="design" data-sres-uuid="{{ column.config.uuid }}">Show friendly column names</button>
+                                    </div>
+                                    <div class="tab-pane fade" id="quickinfo_bulk_settings" role="tabpanel" aria-labelledby="quickinfo_bulk_settings-tab">
+                                        <div name="quickInfoBulk" id="quickInfoBulk" class="sres-tinymce-editor tinymce-basic-oneline border-right border-bottom border-left rounded sres-quickinfo-editor">{{ (request.form.quickInfoBulk or column.config.quick_info.bulk)|safe_no_script }}</div>
+                                        <button type="button" class="btn btn-sm btn-light sres-quickinfo-insert-field sres-disable-upon-translate-column-references" data-sres-field="column"><span class="fa fa-dollar-sign" aria-hidden="true"></span> Insert column reference</button>
+                                        <button type="button" class="btn btn-sm btn-light sres-quickinfo-insert-field sres-disable-upon-translate-column-references" data-sres-field="columnname" value="$COLUMNNAME$">Column name</button>
+                                        <button type="button" class="btn btn-sm btn-light sres-quickinfo-insert-field sres-disable-upon-translate-column-references" data-sres-field="columndescription" value="$COLUMNDESCRIPTION$">Column description</button>
+                                        <button type="button" class="btn btn-sm btn-light sres-quickinfo-insert-field sres-disable-upon-translate-column-references" data-sres-field="inactivewarning" value="$INACTIVEWARNING$">Warning if column is inactive</button>
+                                        <button type="button" class="btn btn-sm btn-light sres-translate-column-references" data-sres-current-mode="design" data-sres-uuid="{{ column.config.uuid }}">Show friendly column names</button>
+                                    </div>
+                                    <div class="tab-pane fade" id="quickinfo_rollview_settings" role="tabpanel" aria-labelledby="quickinfo_rollview_settings-tab">
+                                        <div>
+                                            <div id="custom_options_quickinfo_rollview" class="sres-tinymce-editor tinymce-basic border-right border-bottom border-left rounded sres-quickinfo-editor">{{ (request.form.custom_options_quickinfo_rollview or column.config.custom_options.quickinfo_rollview)|safe_no_script }}</div>
+                                            <button type="button" class="btn btn-sm btn-light sres-quickinfo-insert-field sres-disable-upon-translate-column-references" data-sres-field="column"><span class="fa fa-dollar-sign" aria-hidden="true"></span> Insert column reference</button>
+                                            <button type="button" class="btn btn-sm btn-light sres-quickinfo-insert-field sres-disable-upon-translate-column-references" data-sres-field="columnname" value="$COLUMNNAME$">Column name</button>
+                                            <button type="button" class="btn btn-sm btn-light sres-quickinfo-insert-field sres-disable-upon-translate-column-references" data-sres-field="columndescription" value="$COLUMNDESCRIPTION$">Column description</button>
+                                            <button type="button" class="btn btn-sm btn-light sres-quickinfo-insert-field sres-disable-upon-translate-column-references" data-sres-field="inactivewarning" value="$INACTIVEWARNING$">Warning if column is inactive</button>
+                                            <button type="button" class="btn btn-sm btn-light sres-multi-column-magic-formatter-insert sres-disable-upon-translate-column-references" data-sres-insert-target="custom_options_quickinfo_rollview">
+                                                <span class="fa fa-layer-group" aria-hidden="true"></span> Insert multi-column magic formatter
+                                            </button>
+                                            <button type="button" class="btn btn-sm btn-light sres-translate-column-references" data-sres-current-mode="design" data-sres-uuid="{{ column.config.uuid }}">Show friendly column names</button>
+                                        </div>
+                                        <br />
+                                        <div class="form-inline">
+                                            <label for="custom_options_quickinfo_rollview_header">Column header</label>
+                                            <input type="text" name="custom_options_quickinfo_rollview_header" id="custom_options_quickinfo_rollview_header" class="ml-2 mr-2 form-control" value="{{ request.form.custom_options_quickinfo_rollview_header or column.config.custom_options.quickinfo_rollview_header }}" />
+                                            <label for="custom_options_quickinfo_rollview_priority">Priority</label>
+                                            <select name="custom_options_quickinfo_rollview_priority" id="custom_options_quickinfo_rollview_priority" class="ml-2 mr-2 form-control">
+                                                {% for quickinfo_rollview_priority in [{'value':'', 'display':'Normal'}, {'value':'1', 'display':'First importance'}, {'value':'10', 'display':'Most important after data entry'}, {'value':'50', 'display':'Lower importance than names'}] %}
+                                                    <option value="{{ quickinfo_rollview_priority.value }}" 
+                                                        {% if request.form.custom_options_quickinfo_rollview_priority or column.config.custom_options.quickinfo_rollview_priority == quickinfo_rollview_priority.value %}selected{% endif %}>
+                                                        {{ quickinfo_rollview_priority.display }}
+                                                    </option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row" id="panel_data_type">
+                    <label class="col-sm-2 col-form-label sres-form-label">Data type</label>
+                    <div class="col-sm-10">
+                        {% if vars.mode == 'edit' %}
+                            <p class="text-muted">The data type should not be changed for existing columns. Feeling dangerous? <a href="javascript:void(0);" class="sres-data-type-unlock">Unlock this</a>.</p>
+                        {% endif %}
+                        {% for key, value in vars.COLUMN_DATA_TYPES_META.items() %}
+                            {% if key in ['submission', 'multiEntry', 'mark', 'counter', 'signinout', 'signinoutmemory', 'image', 'file', 'teacherallocation'] %}
+                                {% if value.user_configurable %}
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="dataType" id="dataType-{{ key }}" value="{{ key }}" required {% if (request.form.dataType or column.config.type) == key %}checked{% elif vars.mode == 'edit' %}disabled{% endif %}>
+                                        <label class="form-check-label" for="dataType-{{ key }}" data-tippy-content="{{ value.description }}">
+                                            {{ value.name }}
+                                        </label>
+                                    </div>
+                                {% endif %}
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="form-group row d-none" id="signinout" data-role="detailedOptions">
+                    <label class="col-sm-2 col-form-label sres-form-label">Sign in/out options</label>
+                    <div class="col-sm-10 form-inline">
+                        Upon sign out&nbsp;
+                        <select name="signinout_onout" id="signinout_onout" class="form-control">
+                            <option value="recordout">record sign-out timestamp</option>
+                            <option value="clear" {% if (request.form.signinout_onout or column.config.sign_in_out.on_out) == 'clear' %}selected{% endif %}>clear record</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group row d-none" id="signinoutmemory" data-role="detailedOptions">
+                    <label class="col-sm-2 col-form-label sres-form-label">Sign in/out with memory options</label>
+                    <div class="col-sm-10 form-inline">
+                        Count first week (&quot;week 1&quot;) from date
+                        <input type="date" name="signinoutmemory_firstweek" id="signinoutmemory_firstweek" class="form-control ml-2" value="{{ (request.form.signinoutmemory_firstweek or column.config.sign_in_out.week_start)|datetime }}" placeholder="yyyy-mm-dd" />
+                    </div>
+                </div>
+                <div class="form-group row d-none" id="signinout_messages" data-role="detailedOptions">
+                    <label class="col-sm-2 col-form-label sres-form-label">Sign in/out messages</label>
+                    <div class="col-sm-10 form-group">
+                        <label>Welcome message</label>
+                        <div class="form-group">
+                            <div name="signinout_message_welcome" id="signinout_message_welcome" class="sres-tinymce-editor tinymce-basic border rounded">{{ (request.form.signinout_message_welcome or column.config.sign_in_out.message_welcome)|safe_no_script }}</div>
+                        </div>
+                        <label>Goodbye message</label>
+                        <div class="form-group">
+                            <div name="signinout_message_goodbye" id="signinout_message_goodbye" class="sres-tinymce-editor tinymce-basic border rounded">{{ (request.form.signinout_message_goodbye or column.config.sign_in_out.message_goodbye)|safe_no_script }}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row d-none" id="counter" data-role="detailedOptions">
+                    <label class="col-sm-2 col-form-label sres-form-label">Counter</label>
+                    <div class="col-sm-10 form-inline">
+                        Increment by
+                        <input type="text" name="counterIncrement" value="{{ request.form.counterIncrement or column.config.counter.increment }}" class="form-control ml-2 mr-2">
+                        each time and warn when counter is greater than 
+                        <input type="text" name="counterMax" value="{{ request.form.counterMax or column.config.counter.max }}" class="form-control ml-2 mr-2"> <!--- TODO: check this works --->
+                    </div>
+                </div>
+                <div class="form-group row d-none" id="selectFromList" data-role="detailedOptions">
+                    <label class="col-sm-2 col-form-label sres-form-label">Selectable options</label>
+                    <div class="col-sm-10">
+                        <div class="form-inline">
+                            <div class="form-inline">
+                                <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#modal_select_from_list_editor" data-sres-modal-source="selectFromListList"><span class="fa fa-edit" aria-hidden="true"></span> Edit selectable options</button>
+                                <input type="text" name="selectFromListList" id="selectFromListList" class="form-control d-none" value="{% if column.config.simple_input.options is string %}{{ column.config.simple_input.options }}{% else %}{{ (request.form.selectFromListList or column.config.simple_input.options)|jsondump }}{% endif %}" readonly/>
+                            </div>
+                            <label for="custom_options_select_from_list_mode" class="ml-2">Selection mode</label>
+                            <select name="custom_options_select_from_list_mode" class="form-control ml-2">
+                                <option value="single">Select only one</option>
+                                <option value="multiple" {% if (request.form.custom_options_select_from_list_mode or column.config.custom_options.select_from_list_mode) == 'multiple' %}selected{% endif %}>Can select multiple</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row d-none" id="allowFreeInput" data-role="detailedOptions">
+                    <label class="col-sm-2 col-form-label sres-form-label">Allow free input</label>
+                    <div class="col-sm-10">
+                        <select name="allowFreeInput" class="form-control">
+                            <option value="false">Restrict entry to selectable options specified above</option>
+                            <option value="true" {% if (request.form.allowFreeInput or column.config.simple_input.allow_free) == 'true' %}selected{% endif %}>Allow entry of other values not in list above</option>
+                        </select>
+                        <div id="allowFreeInput_options" class="mt-2">
+                            <div class="form-inline">
+                                <label for="allowFreeInputRegex">Values to allow:</label>
+                                <select name="allowFreeInputRegex" id="allowFreeInputRegex" class="form-control ml-2">
+                                    {% for regex_string in vars.TEXT_ENTRY_REGEX_OPTIONS %}
+                                        <option value="{{ regex_string[1] }}" {% if (request.form.allowFreeInputRegex or column.config.simple_input.allow_free_regex) == regex_string[1] %}selected{% endif %}>{{ regex_string[0] }}</option>
+                                    {% endfor %}
+                                </select>
+                                <label for="custom_options_textentry_size" class="ml-2">Text entry size:</label>
+                                <select name="custom_options_textentry_size" id="custom_options_textentry_size" class="form-control ml-2">
+                                    <option value="textbox">Single line textbox</option>
+                                    <option value="textarea" {% if (request.form.custom_options_textentry_size or column.config.custom_options.textentry_size) == 'textarea' %}selected{% endif %}>Multi-line textbox</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row d-none sres-tag-aggregation-related-setting" id="maximumValue">
+                    <div class="col-sm-2">
+                        <label class="col-form-label sres-form-label">Maximum value</label>
+                        <span class="text-muted" data-tippy-content="This is only used if tag aggregations are being used.">
+                            <span class="fas fa-tags"></span>
+                        </span>
+                    </div>
+                    <div class="col-sm-10">
+                        <div class="sres-add-single">
+                            <input type="number" name="custom_options_maximumValue" value="{{ request.form.custom_options_maximumValue or column.config.custom_options.maximumValue }}" class="form-control" />
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row d-none" id="multiEntry" data-role="detailedOptions">
+                    <label class="col-sm-2 col-form-label sres-form-label">Multi-entry subfields</label>
+                    <div class="col-sm-10">
+                        <script>
+                            var multi_entry_count = {{ column.config.multi_entry.options|length }};
+                        </script>
+                        <div class="mb-3">
+                            <button type="button" class="btn btn-primary" id="multi_entry_add_row"><span class="fa fa-plus" aria-hidden="true"></span> Add a subfield</button>
+                            <span class="text-muted">
+                                <span class="fa fa-info-circle" aria-hidden="true"></span>
+                                Re-arrange subfields by dragging the <span class="fa fa-arrows-alt-v" aria-hidden="true"></span> handles.
+                                Subfields should not be re-ordered once data starts being entered for this column.
+                            </span>
+                        </div>
+                        {% if vars.data_exists %}
+                            <div class="alert alert-danger">
+                                <span class="fa fa-exclamation-triangle animated flash slower infinite"></span>
+                                It looks like data already exists in this column.
+                                If the subfields are re-ordered now, the existing data will <strong>not</strong> be re-ordered correspondingly.
+                                This could lead to misrepresentation of data.
+                            </div>
+                        {% endif %}
+                        <div>
+                            <div id="multi_entry_sortable" class="sortable">
+                                {% for multi_entry_option in column.config.multi_entry.options %}
+                                    <div class="card card-body sres-multientry-row mb-2" id="multi_entry_{{ loop.index }}" data-n="{{ loop.index }}">
+                                        <p>
+                                            <span class="fa fa-arrows-alt-v sres-multientry-handle" aria-hidden="true"></span>
+                                            <span class="float-right">
+                                                <button type="button" id="multi_entry_clone_row_{{ loop.index }}" class="btn btn-sm btn-outline-secondary"><span class="fa fa-clone" aria-hidden="true"></span> Clone</button>
+                                                <button type="button" id="multi_entry_delete_row_{{ loop.index }}" class="btn btn-sm btn-outline-secondary"><span class="fa fa-trash" aria-hidden="true"></span> Delete</button>
+                                            </span>
+                                        </p>
+                                        <!-- what this entry is titled -->
+                                        <div class="row form-group">
+                                            <label class="col-sm-2 col-form-label sres-form-label">Label:</label>
+                                            <div class="col-sm-10">
+                                                <div class="border rounded sres-multientry-label" id="multi_entry_label_{{ loop.index }}">{{ multi_entry_option.label|safe_no_script }}</div>
+                                            </div>
+                                        </div>
+                                        <!-- the type of entry -->
+                                        <div class="row form-group">
+                                            <label class="col-sm-2 col-form-label sres-form-label">Type:</label>
+                                            <div class="col-sm-10 form-inline">
+                                                {# type #}
+                                                <select name="multi_entry_type_{{ loop.index }}" data-n="{{ loop.index }}" class="form-control sres-multientry-type-selector mb-2" aria-label="Select subfield type">
+                                                    {% for subfield_type in vars.MULTI_ENTRY_SUBFIELD_TYPES %}
+                                                        <option value="{{ subfield_type.name }}" {% if multi_entry_option.type == subfield_type.name %}selected{% endif %}>{{ subfield_type.description }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                                {# required #}
+                                                <label class="control-label sres-form-label ml-2 mr-2 mb-2">Required:</label>
+                                                <select class="form-control mb-2" name="multi_entry_required_{{ loop.index }}" data-n="{{ loop.index }}" aria-label="Is this a required field?">
+                                                    <option value="0">No</option>
+                                                    <option value="1" {% if multi_entry_option.required|string == '1' %}selected{% endif %}>Yes</option>
+                                                </select>
+                                                {# render calculated value #}
+                                                <label class="control-label sres-form-label ml-2 mr-2 mb-2 sres-multientry-render-calculated-value-config" data-sres-n="{{ loop.index }}">Show calculated value:</label>
+                                                <select class="form-control sres-multientry-render-calculated-value-config mb-2" name="multi_entry_render_calculated_value_{{ loop.index }}" data-sres-n="{{ loop.index }}" data-n="{{ loop.index }}">
+                                                    <option value="no">No</option>
+                                                    <option value="yes" {% if multi_entry_option.render_calculated_value == 'yes' %}selected{% endif %}>Yes</option>
+                                                </select>
+                                                <button type="button" class="btn btn-primary d-none sres-multientry-render-calculated-value-config-button ml-1 mb-2"><span class="fa fa-cog"></span></button>
+                                                <input type="hidden" name="multi_entry_render_calculated_value_config_{{ loop.index }}" data-n="{{ loop.index }}" value="{{ (multi_entry_option.render_calculated_value_config or {})|jsondump }}">
+                                                {# editing permissions #}
+                                                <label class="control-label sres-form-label ml-2 mr-2 mb-2">Edit permissions:</label>
+                                                <select class="form-control mb-2" name="multi_entry_editing_allowed_by_{{ loop.index }}" data-n="{{ loop.index }}" aria-label="Is this only editable by staff?">
+                                                    <option value="anyone">Anyone with permission</option>
+                                                    <option value="staff" {% if multi_entry_option.editing_allowed_by == 'staff' %}selected{% endif %}>Always staff only</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <!-- show regex -->
+                                        <div class="row form-group sres-multientry-regex-options" data-sres-n="{{ loop.index }}">
+                                            <label data-option="multi_entry_options_regex" data-n="{{ loop.index }}" class="col-sm-2 col-form-label sres-form-label">Allowed input:</label>
+                                            <div class="col-sm-10">
+                                                <select name="multi_entry_regex_{{ loop.index }}" class="form-control" aria-label="Choose allowed inputs">
+                                                    {% for regex_string in vars.TEXT_ENTRY_REGEX_OPTIONS %}
+                                                        <option value="{{ regex_string[1] }}" {% if (multi_entry_option.regex) == regex_string[1] %}selected{% endif %}>{{ regex_string[0] }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <!-- maximumValue -->
+                                        <div class="row form-group sres-tag-aggregation-related-setting d-none">
+                                            <div class="col-sm-2">
+                                                <label class="col-form-label sres-form-label">Maximum value:</label>
+                                                <span class="text-muted" data-tippy-content="This is only used if tag aggregations are being used.">
+                                                    <span class="fas fa-tags"></span>
+                                                </span>
+                                            </div>
+                                            <div class="col-sm-10">
+                                                <input type="number" name="multi_entry_maximumValue_{{ loop.index }}" value="{{ multi_entry_option.maximumValue }}" class="form-control" />
+                                            </div>
+                                        </div>
+                                        <!-- show select -->
+                                        <div class="row sres-multientry-selectable-options" data-sres-n="{{ loop.index }}">
+                                            <br />
+                                            <label data-option="multi_entry_options_select" data-n="{{ loop.index }}" class="col-sm-2 col-form-label sres-form-label">Selectable options:</label>
+                                            <div class="col-sm-10 form-inline">
+                                                <button type="button" class="btn btn-primary mr-2 mb-2" id="multi_entry_editor_select_{{ loop.index }}" data-toggle="modal" data-target="#modal_select_from_list_editor" data-sres-modal-source="multi_entry_select_{{ loop.index }}"><span class="fa fa-edit"></span> Edit selectable options</button>
+                                                <input type="text" name="multi_entry_select_{{ loop.index }}" id="multi_entry_select_{{ loop.index }}" data-sres-role="multi_entry_select" value="{% if multi_entry_option.select is string %}{{ multi_entry_option.select }}{% else %}{{ (multi_entry_option.select or [])|jsondump }}{% endif %}" class="form-control d-none" readonly />
+                                                <!-- select mode -->
+                                                <select name="multi_entry_select_mode_{{ loop.index }}" data-sres-n="{{ loop.index }}" class="form-control mr-2 mb-2 sres-multientry-select-mode" aria-label="How many selections allowed?">
+                                                    <option value="single">Select one option only</option>
+                                                    <option value="multiple" {% if multi_entry_option.selectmode == 'multiple' %}selected{% endif %}>Multiple selections allowed</option>
+                                                </select>
+                                                <!-- button display mode -->
+                                                <span class="sres-multientry-select-display-mode-container form-inline mb-2" data-sres-n="{{ loop.index }}">
+                                                    <label class="sres-form-label mr-2">Display as:</label>
+                                                    <select name="multi_entry_select_display_mode_{{ loop.index }}" id="multi_entry_select_display_mode_{{ loop.index }}" 
+                                                        data-sres-n="{{ loop.index }}" class="form-control sres-multientry-select-display-mode mr-2" aria-label="Display buttons as:">
+                                                        <option value="btn-group">Horizontal group</option>
+                                                        <option value="btn-group-vertical" {% if multi_entry_option.select_display_mode == 'btn-group-vertical' %}selected{% endif %}>Vertical group</option>
+                                                        <option value="vertical-list" {% if multi_entry_option.select_display_mode == 'vertical-list' %}selected{% endif %}>Vertical list (good for long buttons)</option>
+                                                    </select>
+                                                </span>
+                                                <!-- slider options -->
+                                                <span class="sres-multientry-slider-mode-container form-inline mb-2" data-sres-n="{{ loop.index }}">
+                                                    <label class="sres-form-label mr-2">Slider mode:</label>
+                                                    <select name="multi_entry_slider_mode_{{ loop.index }}" id="multi_entry_slider_mode_{{ loop.index }}" 
+                                                        data-sres-n="{{ loop.index }}" class="form-control sres-multientry-slider-mode mr-2" aria-label="Slider mode:">
+                                                        <option value="textual">Textual</option>
+                                                        <option value="numeric-snap" {% if multi_entry_option.slider_mode == 'numeric-snap' %}selected{% endif %}>Numeric (snap to options)</option>
+                                                        <option value="numeric-free" {% if multi_entry_option.slider_mode == 'numeric-free' %}selected{% endif %}>Numeric (free slide)</option>
+                                                    </select>
+                                                </span>
+                                                <span class="mb-2 sres-multientry-slider-step sres-multientry-slider-config sres-multientry-slider-config-numeric-free sres-multientry-slider-config-numeric-snap form-inline" data-sres-n="{{ loop.index }}">
+                                                    <label class="sres-form-label mr-2">Step:</label>
+                                                    <input type="text" name="multi_entry_slider_step_{{ loop.index }}" id="multi_entry_slider_step_{{ loop.index }}" value="{{ multi_entry_option.slider_step }}"
+                                                        class="form-control mr-2" placeholder="Numeric e.g. 0.1 or 2" aria-label="Step:"
+                                                        data-tippy-content="The increment between allowed numerical values. Only applies for numeric sliders. Enter a numeric value e.g. 0.1 or 2, etc.">
+                                                </span>
+                                                <span class="mb-2 sres-multientry-range-mode sres-multientry-slider-config sres-multientry-slider-config-numeric-free form-inline" data-sres-n="{{ loop.index }}">
+                                                    <label class="sres-form-label mr-2">If value is between two options:</label>
+                                                    <select name="multi_entry_range_mode_{{ loop.index }}" id="multi_entry_range_mode_{{ loop.index }}" data-sres-n="{{ loop.index }}" class="form-control mr-2 sres-multientry-range-mode"
+                                                        data-tippy-content="This has no impact on the actual data saved. It is only used when rendering labels and descriptions if the saved data does not exactly match an option."
+                                                        aria-label="If value is between two options:"
+                                                    >
+                                                        <option value="rounddown">Treat as lower option</option>
+                                                        <option value="roundup" {% if multi_entry_option.range_mode == 'roundup' %}selected{% endif %}>Treat as higher option</option>
+                                                    </select>
+                                                </span>
+                                                <div class="alert alert-danger sres-multientry-slider-warning-nonnumeric-options d-none">
+                                                    <span class="fa fa-exclamation-triangle"></span>
+                                                    Numeric sliders must have numeric values. It looks like some of the selectable options are not set to save numeric values.
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <!-- label-only config -->
+                                        <div class="row sres-multientry-label-options mt-2" data-sres-n="{{ loop.index }}">
+                                            <label data-option="multi_entry_options_label-only" data-n="{{ loop.index }}" class="col-sm-2 col-form-label sres-form-label">Label options:</label>
+                                            <div class="col-sm-10 form-inline">
+                                                <span class="form-inline">
+                                                    <label class="sres-form-label mr-2">Set as expandable/collapsible header:</label>
+                                                    <select name="multi_entry_accordion_header_{{ loop.index }}" id="multi_entry_accordion_header_{{ loop.index }}" data-sres-n="{{ loop.index }}" class="form-control mr-2">
+                                                        <option value="">No</option>
+                                                        <option value="break" {% if multi_entry_option.accordion_header == 'break' %}selected{% endif %}>No, and break the set of elements so far</option>
+                                                        <option value="collapsible" {% if multi_entry_option.accordion_header == 'collapsible' %}selected{% endif %}>Yes</option>
+                                                        <option value="collapsed" {% if multi_entry_option.accordion_header == 'collapsed' %}selected{% endif %}>Yes, and default to collapsed</option>
+                                                    </select>
+                                                </span>
+                                                <span class="form-inline">
+                                                    <label class="sres-form-label mr-2">Show additional save button:</label>
+                                                    <select name="multi_entry_extra_save_button_{{ loop.index }}" id="multi_entry_extra_save_button_{{ loop.index }}" data-sres-n="{{ loop.index }}" class="form-control mr-2">
+                                                        <option value="">No</option>
+                                                        <option value="show" {% if multi_entry_option.extra_save_button == 'show' %}selected{% endif %}>Yes</option>
+                                                    </select>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}        
+                            </div>
+                        </div>
+                        <input type="hidden" name="multi_entry_sort_order" value="">
+                        <script>
+                            initialiseLabelEditors();
+                        </script>
+                    </div>
+                </div>
+                <div class="form-group row d-none" id="datatype_image" data-role="detailedOptions">
+                    <label class="col-sm-2 col-form-label sres-form-label">Image options</label>
+                    <div class="col-sm-10 form-inline">
+                        Image maximum dimension on largest side
+                        <input type="number" name="custom_options_datatype_image_max_dimension" id="custom_options_datatype_image_max_dimension" value="{{ request.form.custom_options_datatype_image_max_dimension or column.config.custom_options.datatype_image_max_dimension }}" class="form-control ml-2 mr-2">
+                        pixels
+                    </div>
+                </div>
+                <div class="form-group row d-none" id="datatype_file" data-role="detailedOptions">
+                    <label class="col-sm-2 col-form-label sres-form-label">File options</label>
+                    <div class="col-sm-10">
+                        <div class="form-inline mb-2">
+                            <label for="custom_options_datatype_file_multiple_number" class="sres-form-label">Number of file(s) to allow per student</label>
+                            <input type="number" min="1" max="10" name="custom_options_datatype_file_multiple_number" id="custom_options_datatype_file_multiple_number" value="{{ request.form.custom_options_datatype_file_multiple_number or column.config.custom_options.datatype_file_multiple_number }}" class="form-control ml-2">
+                        </div>
+                        <div class="form-inline mb-2">
+                            <label for="custom_options_datatype_file_allowed_extensions" class="sres-form-label">Permitted file extensions</label>
+                            <input type="text" name="custom_options_datatype_file_allowed_extensions" id="custom_options_datatype_file_allowed_extensions" value="{{ request.form.custom_options_datatype_file_allowed_extensions or column.config.custom_options.datatype_file_allowed_extensions }}" class="form-control ml-2 mr-2">
+                            <span class="text-muted">Separate extensions with a comma (e.g. <code>.doc,.docx,.pdf</code>). Leave blank to permit any file.</span>
+                        </div>
+                        <div class="form-inline mb-2">
+                            <label for="custom_options_datatype_file_max_size_megabytes" class="sres-form-label">Maximum size per file (megabytes)</label>
+                            <input type="number" id="custom_options_datatype_file_max_size_megabytes" value="5" disabled class="form-control ml-2 mr-2">
+                            <span class="text-muted">This maximum size cannot be changed. SRES is not designed to be a file repository, so this column type should only be used to store smaller files.</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label" for="custom_options_grouping_column">Group students by</label>
+                    <div class="col-sm-10 form-inline">
+                        <select name="custom_options_grouping_column" id="custom_options_grouping_column" class="form-control mr-2 mb-2">
+                            <option value="">(Not used)</option>
+                            {% for available_column in vars.other_available_columns %}
+                                <option value="{{ available_column.uuid }}" {% if (request.form.custom_options_grouping_column or column.config.custom_options.grouping_column) == available_column.uuid %}selected{% endif %}>
+                                    {{ available_column.name }}{% if available_column.description %} ({{ available_column.description }}){% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <span class="text-muted">If needed, choose another column to act as a group designation when working with this column.</span>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col">
+                        <a href="javascript:void(0);" id="btn_show_advanced_settings" data-toggle="collapse" aria-expanded="false" 
+                            data-target="#row_permissions_edit,#row_only_when_edit,#row_permissions_view,#row_auto_reset,#row_auto_backup,#row_file_link,#row_apply_to_others,#row_notify_email,.row_custom_options,.row_time_delay_lockout,#row_auto_proceed">
+                            Advanced settings <span class="fa fa-angle-down"></span>
+                        </a>
+                    </div>
+                </div>
+                {# Settings for WHO #}
+                <div class="form-group row collapse row_custom_options">
+                    <div class="col">
+                        <h5 class="border-top">Who can edit data for whom?</h5>
+                        <span>These settings control who is allowed to edit whose data</span>
+                    </div>
+                </div>
+                <div class="form-group row collapse" id="row_permissions_edit">
+                    <label class="col-sm-2 col-form-label sres-form-label">Permissions for editing data</label>
+                    <div class="col-sm-10">
+                        <div class="form-inline">
+                            <label class="sres-form-label">User-level staff:</label>
+                            <select id="permissions_edit_mode_user" name="permissions_edit_mode_user" class="form-control ml-2 mr-2">
+                                <option value="allow">Allow editing</option>
+                                <option value="deny" {% if (request.form.permissions_edit_mode_user or column.config.permissions.edit.user.mode) == "deny" %}selected{% endif %}>Deny editing</option>
+                            </select>
+                        </div>
+                        <div class="form-inline mt-2 ml-3">
+                            <label class="mr-2">except by</label>
+                            <select id="permissions_edit_except_user" name="permissions_edit_except_user" class="form-control ml-2" multiple>
+                                {% for username in table.get_authorised_usernames()['users'] %}
+                                    <option value="{{ username }}" {% if username in (request.form.permissions_edit_except_user or column.config.permissions.edit.user.except) %}selected{% endif %}>{{ username }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-inline mt-2 ml-3">
+                            <label>Restrict by username(s) specified in column</label>
+                            <select name="custom_options_restrict_by_username_column" id="custom_options_restrict_by_username_column" class="form-control ml-2">
+                                <option value="">(Not restricted)</option>
+                                {% for available_column in vars.other_available_columns %}
+                                    <option value="{{ available_column.uuid }}" {% if (request.form.custom_options_restrict_by_username_column or column.config.custom_options.restrict_by_username_column) == available_column.uuid %}selected{% endif %}>
+                                        {{ available_column.name }}{% if available_column.description %} ({{ available_column.description }}){% endif %}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group mt-3">
+                            <div class="form-inline mt-2">
+                                <!--- student edit permissions --->
+                                <label class="sres-form-label">Students:</label>
+                                <select id="permissions_edit_mode_student" name="permissions_edit_mode_student" class="form-control ml-2 mr-2">
+                                    <option value="deny">Deny editing</option>
+                                    <option value="self" {% if (request.form.permissions_edit_mode_student or column.config.permissions.edit.student.mode) in ['allow', 'self'] %}selected{% endif %}>Allow editing of own data</option>
+                                    <option value="peer" {% if (request.form.permissions_edit_mode_student or column.config.permissions.edit.student.mode) == 'peer' %}selected{% endif %}>Allow direct editing of peers' data</option>
+                                    <option value="self,peer" {% if (request.form.permissions_edit_mode_student or column.config.permissions.edit.student.mode) == 'self,peer' %}selected{% endif %}>Allow direct editing of own and peers' data</option>
+                                </select>
+                            </div>
+                            <div class="sres-student-self-data-entry-container collapse">
+                            </div>
+                            <div class="sres-student-data-entry-container collapse">
+                                <div class="form-inline mt-2 ml-3">
+                                    <label>Trigger 'apply data to others' for peers when a student saves data for someone:</label>
+                                    <select id="custom_options_student_data_entry_trigger_apply_to_others" name="custom_options_student_data_entry_trigger_apply_to_others" class="form-control ml-2">
+                                        <option value="disabled">No</option>
+                                        <option value="enabled" {% if (request.form.custom_options_student_data_entry_trigger_apply_to_others or column.config.custom_options.student_data_entry_trigger_apply_to_others) == 'enabled' %}selected{% endif %}>Yes</option>
+                                    </select>
+                                </div>
+                                <div class="form-inline mt-2 ml-3">
+                                    <label>Grant students direct access to data entry page:</label>
+                                    <select id="custom_options_student_direct_access" name="custom_options_student_direct_access" class="form-control ml-2">
+                                        <option value="deny">Deny</option>
+                                        <option value="single" {% if (request.form.custom_options_student_direct_access or column.config.custom_options.student_direct_access) in ['allow', 'single'] %}selected{% endif %}>Allow access to single mode</option>
+                                        <option value="roll" {% if (request.form.custom_options_student_direct_access or column.config.custom_options.student_direct_access) == 'roll' %}selected{% endif %}>Allow access to roll view mode</option>
+                                        <option value="single,roll" {% if (request.form.custom_options_student_direct_access or column.config.custom_options.student_direct_access) == 'single,roll' %}selected{% endif %}>Allow access to single and roll view modes</option>
+                                    </select>
+                                    <span class="ml-2 d-none sres-student-data-entry-warning text-danger" data-tippy-content="When students access the data entry page, they may be able to access currently-saved data for other students. To modulate this, change the 'Load existing data' setting. For example, you can limit students to only access data about peers that they themselves have saved.">
+                                        <span class="fa fa-exclamation-triangle"></span>
+                                        Data exposure warning
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="sres-student-data-entry-container collapse">
+                                <div class="form-inline mt-2 ml-3">
+                                    <label>If a student is not already found in this list:</label>
+                                    <select id="custom_options_student_data_entry_if_student_unknown" name="custom_options_student_data_entry_if_student_unknown" class="form-control ml-2">
+                                        <option value="disallow">deny access to this column (default)</option>
+                                        <option value="addextra" {% if (request.form.custom_options_student_data_entry_if_student_unknown or column.config.custom_options.student_data_entry_if_student_unknown) == 'addextra' %}selected{% endif %}>add them as an extra student to this list</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group sres-student-peer-data-entry-container collapse">
+                            <div class="form-inline mt-2 ml-3">
+                                <label class="mb-2">Peers must have</label>
+                                <select name="custom_options_peer_data_entry_match_operator" id="custom_options_peer_data_entry_match_operator" class="form-control ml-2 mr-2 mb-2">
+                                    <option value="same">the same</option>
+                                    <option value="different" {% if (request.form.custom_options_peer_data_entry_match_operator or column.config.custom_options.peer_data_entry_match_operator) == 'different' %}selected{% endif %}>different</option>
+                                </select>
+                                <label class="mb-2">data in:</label>
+                                <select name="custom_options_peer_data_entry_match_column" id="custom_options_peer_data_entry_match_column" class="form-control ml-2 mb-2">
+                                    <option value="">(Not used)</option>
+                                    {% for available_column in vars.other_available_columns %}
+                                        <option value="{{ available_column.uuid }}" {% if (request.form.custom_options_peer_data_entry_match_column or column.config.custom_options.peer_data_entry_match_column) == available_column.uuid %}selected{% endif %}>
+                                            {{ available_column.name }}{% if available_column.description %} ({{ available_column.description }}){% endif %}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-inline mt-2 ml-3">
+                                <label class="mt-2">To enter data for peers, students must have particular data in column:</label>
+                                <select name="custom_options_peer_data_entry_condition_column" id="custom_options_peer_data_entry_condition_column" class="form-control mt-2 ml-2">
+                                    <option value="">(Not used)</option>
+                                    {% for available_column in vars.other_available_columns %}
+                                        <option value="{{ available_column.uuid }}" {% if (request.form.custom_options_peer_data_entry_condition_column or column.config.custom_options.peer_data_entry_condition_column) == available_column.uuid %}selected{% endif %}>
+                                            {{ available_column.name }}{% if available_column.description %} ({{ available_column.description }}){% endif %}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <select name="custom_options_peer_data_entry_condition_operator" id="custom_options_peer_data_entry_condition_operator" class="form-control ml-2 mt-2 sres-peer-data-entry-condition-config">
+                                    <option value="eq" {% if (request.form.custom_options_peer_data_entry_condition_operator or column.config.custom_options.peer_data_entry_condition_operator) == 'eq' %}selected{% endif %}>exactly matching</option>
+                                    <option value="neq" {% if (request.form.custom_options_peer_data_entry_condition_operator or column.config.custom_options.peer_data_entry_condition_operator) == 'neq' %}selected{% endif %}>not matching</option>
+                                    <option value="contains" {% if (request.form.custom_options_peer_data_entry_condition_operator or column.config.custom_options.peer_data_entry_condition_operator) == 'contains' %}selected{% endif %}>containing</option>
+                                    <option value="ncontains" {% if (request.form.custom_options_peer_data_entry_condition_operator or column.config.custom_options.peer_data_entry_condition_operator) == 'ncontains' %}selected{% endif %}>not containing</option>
+                                    <option value="regex" {% if (request.form.custom_options_peer_data_entry_condition_operator or column.config.custom_options.peer_data_entry_condition_operator) == 'regex' %}selected{% endif %}>matching a regular expression</option>
+                                </select>
+                                <input type="text" name="custom_options_peer_data_entry_condition_value" id="custom_options_peer_data_entry_condition_value" 
+                                    class="form-control ml-2 mt-2 sres-peer-data-entry-condition-config" placeholder="Enter a value if needed" 
+                                    value="{{ request.form.custom_options_peer_data_entry_condition_value or column.config.custom_options.peer_data_entry_condition_value }}">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {# Settings for WHEN #}
+                <div class="form-group row collapse row_custom_options">
+                    <div class="col">
+                        <h5 class="border-top">When can data be entered?</h5>
+                        <span>These settings control when data can be entered</span>
+                    </div>
+                </div>
+                <div class="form-group row row_custom_options collapse">
+                    <label class="col-sm-2 col-form-label sres-form-label">Active time range</label>
+                    <div class="col-sm-10 form-inline">
+                        Column only active between
+                        <input type="time" step="1" name="active_range_from_time" id="active_range_from_time" pattern="([01]\d|2[0-3]):([0-5]\d):([0-5]\d)" placeholder="hh:mm:ss" value="{{ (request.form.active_range_from_time or column.config.active.range_from_time)|datetime(format='hms') }}" required data-sres-required class="form-control ml-2 mr-2 autocomplete="off" /> 
+                        to
+                        <input type="time" step="1" name="active_range_to_time" id="active_range_to_time" pattern="([01]\d|2[0-3]):([0-5]\d):([0-5]\d)" placeholder="hh:mm:ss" value="{{ (request.form.active_range_to_time or column.config.active.range_to_time)|datetime(format='hms') }}" required data-sres-required class="form-control ml-2 mr-2" autocomplete="off" /> 
+                        inclusive                    
+                    </div>
+                </div>
+                <div class="form-group row collapse row_time_delay_lockout">
+                    <label class="col-sm-2 col-form-label sres-form-label">Time delay lockout</label>
+                    <div class="col-sm-10 form-inline">
+                        <label for="custom_options_time_delay_lockout_duration">Time delay lockout duration (seconds)</label>
+                        <input type="number" name="custom_options_time_delay_lockout_duration" id="custom_options_time_delay_lockout_duration" value="{{ request.form.custom_options_time_delay_lockout_duration or column.config.custom_options.time_delay_lockout_duration }}" class="form-control ml-2">
+                    </div>
+                </div>
+                {# Settings for HOW #}
+                <div class="form-group row collapse row_custom_options">
+                    <div class="col">
+                        <h5 class="border-top">How are data entered?</h5>
+                        <span>These settings control the workflows around how data are entered</span>
+                    </div>
+                </div>
+                <div class="form-group row collapse" id="row_only_when_edit">
+                    <label class="col-sm-2 col-form-label sres-form-label">Only show certain students</label>
+                    <div class="col-sm-10">
+                        <div class="form-inline">
+                            <label>Only show students who have particular data in column:</label>
+                            <select name="custom_options_only_show_condition_column" id="custom_options_only_show_condition_column" class="form-control mt-2 ml-2">
+                                <option value="">(Not used)</option>
+                                {% for available_column in vars.other_available_columns %}
+                                    <option value="{{ available_column.uuid }}" {% if (request.form.custom_options_only_show_condition_column or column.config.custom_options.only_show_condition_column) == available_column.uuid %}selected{% endif %}>
+                                        {{ available_column.name }}{% if available_column.description %} ({{ available_column.description }}){% endif %}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <select name="custom_options_only_show_condition_operator" id="custom_options_only_show_condition_operator" class="form-control ml-2 mt-2 sres-only-when-condition-config">
+                                {% for option in [
+                                    ('eq', 'exactly matching'),
+                                    ('neq', 'not matching'),
+                                    ('contains', 'containing'),
+                                    ('ncontains', 'not containing'),
+                                    ('regex', 'matching a regular expression'),
+                                ]%}
+                                    <option value="{{ option[0] }}" {% if (request.form.custom_options_only_show_condition_operator or column.config.custom_options.only_show_condition_operator) == option[0] %}selected{% endif %}>{{ option[1] }}</option>
+                                {% endfor %}
+                            </select>
+                            <input type="text" name="custom_options_only_show_condition_value" id="custom_options_only_show_condition_value" 
+                                class="form-control ml-2 mt-2 sres-only-when-condition-config" placeholder="Enter a value if needed" 
+                                value="{{ request.form.custom_options_only_show_condition_value or column.config.custom_options.only_show_condition_value }}">
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row row_custom_options collapse">
+                    <label class="col-sm-2 col-form-label sres-form-label">Data entry workflow options</label>
+                    <div class="col-sm-10">
+                        <h6>General</h6>
+                        <div class="row mb-3">
+                            <div class="col form-inline">
+                                <label for="custom_options_load_existing_data">Load existing data</label>
+                                <select name="custom_options_load_existing_data" id="custom_options_load_existing_data" class="form-control ml-2">
+                                    <option value="latest">Yes - show the latest entry (default)</option>
+                                    <option value="fresh" {% if (request.form.custom_options_load_existing_data or column.config.custom_options.load_existing_data) == 'fresh' %}selected{% endif %}>No - a fresh entry is made every time</option>
+                                    <option value="user_latest" {% if (request.form.custom_options_load_existing_data or column.config.custom_options.load_existing_data) == 'user_latest' %}selected{% endif %}>Yes but only the latest entry by the current user</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col form-inline">
+                                <label for="custom_options_entry_page_navbar_brand_text">Text header on data entry page</label>
+                                <input name="custom_options_entry_page_navbar_brand_text" value="{{ request.form.custom_options_entry_page_navbar_brand_text or column.config.custom_options.entry_page_navbar_brand_text }}" class="form-control ml-2">
+                            </div>
+                        </div>
+                        <h6>For single entry mode</h6>
+                        <div class="row mb-3">
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_show_scan_identifier_button">Show scan button</label>
+                                <select name="custom_options_show_scan_identifier_button" id="custom_options_show_scan_identifier_button" class="form-control">
+                                    <option value="true">yes</option>
+                                    <option value="false" {% if (request.form.custom_options_show_scan_identifier_button or column.config.custom_options.show_scan_identifier_button) == 'false' %}selected{% endif %}>no</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_show_identifier_entry_box">Show box for manually entering identifier</label>
+                                <select name="custom_options_show_identifier_entry_box" id="custom_options_show_identifier_entry_box" class="form-control">
+                                    <option value="true">yes</option>
+                                    <option value="false" {% if (request.form.custom_options_show_identifier_entry_box or column.config.custom_options.show_identifier_entry_box) == 'false' %}selected{% endif %}>no</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_allow_identifier_entry_search">Allow searching from identifier entry box</label>
+                                <select name="custom_options_allow_identifier_entry_search" id="custom_options_allow_identifier_entry_search" class="form-control">
+                                    <option value="true">yes</option>
+                                    <option value="false" {% if (request.form.custom_options_allow_identifier_entry_search or column.config.custom_options.allow_identifier_entry_search) == 'false' %}selected{% endif %}>no</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_show_name_when_searching">Show student name in search results</label>
+                                <select name="custom_options_show_name_when_searching" id="custom_options_show_name_when_searching" class="form-control">
+                                    <option value="show">Show</option>
+                                    <option value="hide" {% if (request.form.custom_options_show_name_when_searching or column.config.custom_options.show_name_when_searching) == 'hide' %}selected{% endif %}>Hide</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3 mb-3 d-none">
+                                <label for="custom_options_show_person_navigation_buttons">Show next/previous/random person navigation buttons</label>
+                                <select name="custom_options_show_person_navigation_buttons" id="custom_options_show_person_navigation_buttons" class="form-control">
+                                    <option value="false">No</option>
+                                    <option value="true" {% if (request.form.custom_options_show_person_navigation_buttons or column.config.custom_options.show_person_navigation_buttons) == 'true' %}selected{% endif %}>Yes</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_hide_clear_record_button">Hide 'Clear record' button</label>
+                                <select name="custom_options_hide_clear_record_button" id="custom_options_hide_clear_record_button" class="form-control">
+                                    <option value="false">No</option>
+                                    <option value="true" {% if (request.form.custom_options_hide_clear_record_button or column.config.custom_options.hide_clear_record_button) == 'true' %}selected{% endif %}>Yes</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_hide_data_exists_notice">Hide 'Data already exists' warning</label>
+                                <select name="custom_options_hide_data_exists_notice" id="custom_options_hide_data_exists_notice" class="form-control">
+                                    <option value="false">No</option>
+                                    <option value="true" {% if (request.form.custom_options_hide_data_exists_notice or column.config.custom_options.hide_data_exists_notice) == 'true' %}selected{% endif %}>Yes</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_hide_data_exists_notice">Jump to identifier entry box after saving</label>
+                                <select name="custom_options_focus_identifier_entry_box_after_save" id="custom_options_focus_identifier_entry_box_after_save" class="form-control">
+                                    <option value="no">No</option>
+                                    <option value="focus" {% if (request.form.custom_options_focus_identifier_entry_box_after_save or column.config.custom_options.focus_identifier_entry_box_after_save) == 'focus' %}selected{% endif %}>Yes</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_reload_quickinfo_upon_saving">Refresh quick info after saving</label>
+                                <select name="custom_options_reload_quickinfo_upon_saving" id="custom_options_reload_quickinfo_upon_saving" class="form-control">
+                                    <option value="false">No</option>
+                                    <option value="true" {% if (request.form.custom_options_reload_quickinfo_upon_saving or column.config.custom_options.reload_quickinfo_upon_saving) == 'true' %}selected{% endif %}>Yes</option>
+                                </select>
+                            </div>
+                        </div>
+                        <h6>For roll view mode</h6>
+                        <div class="row">
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_rollview_popout_editor">Display data entry fields</label>
+                                <select name="custom_options_rollview_popout_editor" id="custom_options_rollview_popout_editor" class="form-control">
+                                    <option value="inline">inline within the table</option>
+                                    <option value="inline-stacked" {% if (request.form.custom_options_rollview_popout_editor or column.config.custom_options.rollview_popout_editor) == 'inline-stacked' %}selected{% endif %}>inline and stacked within the table</option>
+                                    <option value="popout" {% if (request.form.custom_options_rollview_popout_editor or column.config.custom_options.rollview_popout_editor) == 'popout' %}selected{% endif %}>as a pop-out dialog for each student</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_rollview_display_name_columns">Display default name columns</label>
+                                <select name="custom_options_rollview_display_name_columns" id="custom_options_rollview_display_name_columns" class="form-control">
+                                    <option value="show">Show</option>
+                                    <option value="hide" {% if (request.form.custom_options_rollview_display_name_columns or column.config.custom_options.rollview_display_name_columns) == 'hide' %}selected{% endif %}>Hide</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_rollview_display_identifier_column">Display student identifier column</label>
+                                <select name="custom_options_rollview_display_identifier_column" id="custom_options_rollview_display_identifier_column" class="form-control">
+                                    <option value="show">Show</option>
+                                    <option value="hide" {% if (request.form.custom_options_rollview_display_identifier_column or column.config.custom_options.rollview_display_identifier_column) == 'hide' %}selected{% endif %}>Hide</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_rollview_display_group_column">Display group column</label>
+                                <select name="custom_options_rollview_display_group_column" id="custom_options_rollview_display_group_column" class="form-control">
+                                    <option value="show">Show</option>
+                                    <option value="hide" {% if (request.form.custom_options_rollview_display_group_column or column.config.custom_options.rollview_display_group_column) == 'hide' %}selected{% endif %}>Hide</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_rollview_display_raw_data_column">Display raw data in additional column</label>
+                                <select name="custom_options_rollview_display_raw_data_column" id="custom_options_rollview_display_raw_data_column" class="form-control">
+                                    <option value="true">Yes</option>
+                                    <option value="false" {% if (request.form.custom_options_rollview_display_raw_data_column or column.config.custom_options.rollview_display_raw_data_column) == 'false' %}selected{% endif %}>No</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_rollview_popout_editor_title">Student details to show in popout title</label>
+                                <select name="custom_options_rollview_popout_editor_title" id="custom_options_rollview_popout_editor_title" class="form-control">
+                                    <option value="$SID$">SID</option>
+                                    <option value="$PREFERREDNAME$" {% if (request.form.custom_options_rollview_popout_editor_title or column.config.custom_options.rollview_popout_editor_title) == '$PREFERREDNAME$' %}selected{% endif %}>Preferred-name</option>
+                                    <option value="$PREFERREDNAME$ $SURNAME$" {% if (request.form.custom_options_rollview_popout_editor_title or column.config.custom_options.rollview_popout_editor_title) == '$PREFERREDNAME$ $SURNAME$' %}selected{% endif %}>Preferred-name Surname</option>
+                                    <option value="$SURNAME$, $PREFERREDNAME$" {% if (request.form.custom_options_rollview_popout_editor_title or column.config.custom_options.rollview_popout_editor_title) == '$SURNAME$, $PREFERREDNAME$' %}selected{% endif %}>Surname, Preferred-name</option>
+                                    <option value="$SURNAME$, $PREFERREDNAME$ ($SID$)" {% if (request.form.custom_options_rollview_popout_editor_title or column.config.custom_options.rollview_popout_editor_title) == '$SURNAME$, $PREFERREDNAME$ ($SID$)' %}selected{% endif %}>Surname, Preferred-name (SID)</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_rollview_reload_quickinfo_upon_saving">Refresh quick info after saving</label>
+                                <select name="custom_options_rollview_reload_quickinfo_upon_saving" id="custom_options_rollview_reload_quickinfo_upon_saving" class="form-control">
+                                    <option value="false">No</option>
+                                    <option value="true" {% if (request.form.custom_options_rollview_reload_quickinfo_upon_saving or column.config.custom_options.rollview_reload_quickinfo_upon_saving) == 'true' %}selected{% endif %}>Yes</option>
+                                </select>
+                            </div>
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_rollview_pagination_page_length_default">Default number of students to show</label>
+                                <select name="custom_options_rollview_pagination_page_length_default" id="custom_options_rollview_pagination_page_length_default" class="form-control">
+                                    {% for opts in [('10', '10'), ('30', '30'), ('50', '50'), ('-1', 'All')] %}
+                                        <option value="{{ opts[0] }}" {% if (request.form.custom_options_rollview_pagination_page_length_default or column.config.custom_options.rollview_pagination_page_length_default) == opts[0] %}selected{% endif %}>
+                                            {{ opts[1] }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-sm-3 mb-3">
+                                <label for="custom_options_rollview_data_entry_header">Data entry column header</label>
+                                <input type="text" name="custom_options_rollview_data_entry_header" class="form-control"
+                                    value="{{ (request.form.custom_options_rollview_data_entry_header or column.config.custom_options.rollview_data_entry_header) }}">
+                            </div>
+                            <div class="col-sm-12 mb-3">
+                                <label for="custom_options_rollview_display_change_edit_button_colour">
+                                    In pop-out mode, change colour of 'edit data' button based on whether data has already been saved
+                                </label>
+                                <div class="form-check ml-2">
+                                    <input class="form-check-input" type="radio" name="custom_options_rollview_display_change_edit_button_colour" id="custom_options_rollview_display_change_edit_button_colour_false" value="false"
+                                        {% if (request.form.custom_options_rollview_display_change_edit_button_colour or column.config.custom_options.rollview_display_change_edit_button_colour) == 'false' %}checked{% endif %}>
+                                    <label class="form-check-label" for="custom_options_rollview_display_change_edit_button_colour_false">
+                                        No, keep default <button type="button" class="btn btn-sm btn-outline-primary" aria-label="Blue outlined button"><span class="fa fa-pen" aria-hidden="true" aria-label="Edit data"></span></button>
+                                    </label>
+                                </div>
+                                <div class="form-check ml-2 mt-1">
+                                    <input class="form-check-input" type="radio" name="custom_options_rollview_display_change_edit_button_colour" id="custom_options_rollview_display_change_edit_button_colour_bluegreen" value="bluegreen"
+                                        {% if (request.form.custom_options_rollview_display_change_edit_button_colour or column.config.custom_options.rollview_display_change_edit_button_colour) == 'bluegreen' %}checked{% endif %}>
+                                    <label class="form-check-label" for="custom_options_rollview_display_change_edit_button_colour_bluegreen">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" aria-label="Blue outlined button"><span class="fa fa-pen" aria-hidden="true" aria-label="Edit data"></span></button> when there is no data,
+                                        <button type="button" class="btn btn-sm btn-outline-success" aria-label="Green outlined button"><span class="fa fa-pen" aria-hidden="true" aria-label="Edit data"></span></button> when data has been entered
+                                    </label>
+                                </div>
+                                <div class="form-check ml-2 mt-1">
+                                    <input class="form-check-input" type="radio" name="custom_options_rollview_display_change_edit_button_colour" id="custom_options_rollview_display_change_edit_button_colour_bluefillgreenoutline" value="bluefillgreenoutline"
+                                        {% if (request.form.custom_options_rollview_display_change_edit_button_colour or column.config.custom_options.rollview_display_change_edit_button_colour) == 'bluefillgreenoutline' %}checked{% endif %}>
+                                    <label class="form-check-label" for="custom_options_rollview_display_change_edit_button_colour_bluefillgreenoutline">
+                                        <button type="button" class="btn btn-sm btn-primary" aria-label="Blue filled button"><span class="fa fa-pen" aria-hidden="true" aria-label="Edit data"></span></button> when there is no data,
+                                        <button type="button" class="btn btn-sm btn-outline-success" aria-label="Green outlined button"><span class="fa fa-pen" aria-hidden="true" aria-label="Edit data"></span></button> when data has been entered
+                                    </label>
+                                </div>
+                                <div class="form-check ml-2 mt-1">
+                                    <input class="form-check-input" type="radio" name="custom_options_rollview_display_change_edit_button_colour" id="custom_options_rollview_display_change_edit_button_colour_bluegrey" value="bluegrey"
+                                        {% if (request.form.custom_options_rollview_display_change_edit_button_colour or column.config.custom_options.rollview_display_change_edit_button_colour) == 'bluegrey' %}checked{% endif %}>
+                                    <label class="form-check-label" for="custom_options_rollview_display_change_edit_button_colour_bluegrey">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" aria-label="Blue outlined button"><span class="fa fa-pen" aria-hidden="true" aria-label="Edit data"></span></button> when there is no data,
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" aria-label="Grey outlined button"><span class="fa fa-pen" aria-hidden="true" aria-label="Edit data"></span></button> when data has been entered
+                                    </label>
+                                </div>
+                                <div class="form-check ml-2 mt-1">
+                                    <input class="form-check-input" type="radio" name="custom_options_rollview_display_change_edit_button_colour" id="custom_options_rollview_display_change_edit_button_colour_bluegreentick" value="bluegreentick"
+                                        {% if (request.form.custom_options_rollview_display_change_edit_button_colour or column.config.custom_options.rollview_display_change_edit_button_colour) == 'bluegreentick' %}checked{% endif %}>
+                                    <label class="form-check-label" for="custom_options_rollview_display_change_edit_button_colour_bluegreentick">
+                                        <button type="button" class="btn btn-sm btn-outline-primary" aria-label="Blue outlined button"><span class="fa fa-pen" aria-hidden="true" aria-label="Edit data"></span></button> when there is no data,
+                                        <button type="button" class="btn btn-sm btn-outline-success" aria-label="Green outlined button with tick">
+                                            <span class="fa fa-pen" aria-hidden="true" aria-label="Edit data"></span>
+                                            <span class="fa fa-check-circle ml-1" aria-hidden="true" aria-label="Data entered"></span>
+                                        </button> when data has been entered
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row collapse d-none" id="row_auto_proceed" data-role="detailedOptions">
+                    <label class="col-sm-2 col-form-label sres-form-label">Auto proceed</label>
+                    <div class="col-sm-10">
+                        <p class="text-muted">This is not needed if using the handheld linear scanner, or if manually entering people</p>
+                        <select name="autoProceed" class="form-control">
+                            <option value="false">Wait for user to choose when to scan next individual</option>
+                            <option value="true" {% if (request.form.autoProceed or column.config.auto_proceed) == 'true' %}selected="selected"{% endif %}>Automatically advance to scan next individual after scanning</option>
+                            <option value="1000" {% if (request.form.autoProceed or column.config.auto_proceed) == '1000' %}selected="selected"{% endif %}>Automatically advance to scan next individual after scanning (but delay 1 second)</option>
+                            <option value="2000" {% if (request.form.autoProceed or column.config.auto_proceed) == '2000' %}selected="selected"{% endif %}>Automatically advance to scan next individual after scanning (but delay 2 seconds)</option>
+                        </select>
+                    </div>
+                </div>
+                {# Settings for THEN WHAT #}
+                <div class="form-group row collapse row_custom_options">
+                    <div class="col">
+                        <h5 class="border-top">What happens after data are entered?</h5>
+                        <span>These settings control what can happen after data are entered</span>
+                    </div>
+                </div>
+                <div class="form-group row collapse" id="row_apply_to_others">
+                    <label class="col-sm-2 col-form-label sres-form-label">Apply data to others</label>
+                    <div class="col-sm-10 form-inline">
+                        When saving data for one student,
+                        <select id="apply_to_others_active" name="apply_to_others_active" class="form-control ml-2 mr-2 mb-2">
+                            <option value="false">do not</option>
+                            <option value="true" {% if (request.form.apply_to_others_active or column.config.apply_to_others.active) == 'true' %}selected{% endif %}>also</option>
+                        </select>
+                        apply entered data to other students who have the same value in column:
+                        <select id="apply_to_others_other_columnuuid" name="apply_to_others_other_columnuuid" class="form-control ml-2 mb-2">
+                            <option value="">Select a column</option>
+                            {% for available_column in vars.other_available_columns %}
+                                <option value="{{ available_column.uuid }}" {% if (request.form.apply_to_others_other_columnuuid or column.config.apply_to_others.other_columnuuid) == available_column.uuid %}selected{% endif %}>
+                                    {{ available_column.name }}{% if available_column.description %} ({{ available_column.description }}){% endif %}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <div class="alert alert-danger d-none sres-warning-apply-to-others-student-editing">
+                            <span class="fa fa-exclamation-triangle"></span>
+                            It looks like student data entry is enabled.
+                            If you need student-entered data to propagate to other students per this setting, you will also need to allow SRES to trigger this propagation when a student saves data.
+                            <a href="javascript:void(0);" class="sres-shortcut-hint">Show me the setting.</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row collapse" id="row_notify_email">
+                    <label class="col-sm-2 col-form-label sres-form-label">Email notification</label>
+                    <div class="col-sm-10">
+                        <div class="form-group">
+                            <select name="notifyEmail" class="form-control">
+                                <option value="false" selected="selected">Don't send an email</option>
+                                <option value="true" {% if (request.form.notifyEmail or column.config.notify_email.active) == 'true' %}selected{% endif %}>Send an email as soon as data is saved</option>
+                            </select>
+                        </div>
+                        <div id="notifyEmail_options">
+                            <div class="form-group">
+                                <label for="notifyEmailFrom">From</label> (This is configured in the <a href="{{ url_for('table.edit_table', table_uuid=table_uuid) }}">list settings</a>)
+                                <input type="text" name="notifyEmailFrom" id="notifyEmailFrom" value="{{ table.config.contact.name }} <{{ table.config.contact.email }}>" readonly class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label for="notifyEmailSubject">Subject and body</label> <span class="fa fa-info-circle" aria-hidden="true"></span> Additional allowed data references: $DATA$ $COLUMNNAME$ $UOSCODE$ $UOSNAME$
+                                <div class="input-group">
+                                    <input type="text" id="notifyEmailSubject" name="notifyEmailSubject" value="{{ (request.form.notifyEmailSubject or column.config.notify_email.subject) }}" class="form-control">
+                                    <span class="input-group-append">
+                                        <button type="button" class="btn btn-light sres-notifyemail-subject-insertdatafield"><span class="fa fa-dollar-sign" aria-hidden="true"></span> Insert column reference</button>
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <div name="notifyEmailBody" id="notifyEmailBody" class="sres-tinymce-editor tinymce-basic card card-body">{{ (request.form.notifyEmailBody or column.config.notify_email.body)|safe_no_script }}</div>
+                                <button type="button" class="btn btn-sm btn-light sres-notifyemail-body-insertdatafield sres-disable-upon-translate-column-references"><span class="fa fa-dollar-sign" aria-hidden="true"></span> Insert column reference</button>
+                                <button type="button" class="btn btn-sm btn-light sres-translate-column-references" data-sres-current-mode="design" data-sres-uuid="{{ column.config.uuid }}">Show friendly column names</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {# Settings for AUTO ACTIONS #}
+                <div class="form-group row collapse row_custom_options">
+                    <div class="col">
+                        <h5 class="border-top">Scheduled tasks</h5>
+                        <span>These settings control tasks that can be automatically scheduled to act on this column</span>
+                    </div>
+                </div>
+                <div class="form-group row collapse" id="row_auto_reset">
+                    <label class="col-sm-2 col-form-label sres-form-label">Auto-reset</label>
+                    <div class="col-sm-10 form-inline">
+                        <label>Auto-reset is:</label>
+                        <select name="auto_reset_active" class="form-control ml-2 mr-2">
+                            <option value="false">Inactive</option>
+                            <option value="true" {% if (request.form.auto_reset_active or column.config.auto_reset.active) == 'true' %}selected{% endif %}>Active</option>
+                        </select>
+                        <span id="auto_reset_active_options">
+                            Every day at
+                            <input name="auto_reset_hour" type="time" pattern="[0-2][0-9]\:[0-5][0-9]" value="{{ (request.form.auto_reset_hour or column.config.auto_reset.time)|datetime('hm') }}" class="form-control">
+                            set all values for this column to:
+                            <input type="text" name="auto_reset_value" value="{{ request.form.auto_reset_value or column.config.auto_reset.value }}" class="form-control" />
+                            (can be left blank)
+                        </span>
+                    </div>
+                </div>
+                <div class="form-group row collapse" id="row_auto_backup">
+                    <label class="col-sm-2 col-form-label sres-form-label">Auto-backup via email</label>
+                    <div class="col-sm-10 form-inline">
+                        <label>Auto-backup via email is:</label>
+                        <select name="auto_backup_email_active" class="form-control ml-2 mr-2">
+                            <option value="false">Inactive</option>
+                            <option value="true" {% if (request.form.auto_backup_email_active or column.config.auto_backup_email.active) == 'true' %}selected{% endif %}>Active</option>
+                        </select>
+                        <span id="auto_backup_email_active_options">
+                            Every 
+                            <input name="auto_backup_email_interval" type="number" value="{{ [(request.form.auto_backup_email_interval or column.config.auto_backup_email.interval_minutes), 59]|min }}" class="form-control" min="1" max="59">
+                            minutes (1-59), between 
+                            <input name="auto_backup_email_start" type="time" pattern="[0-2][0-9]\:[0-5][0-9]" value="{{ (request.form.auto_backup_email_start or column.config.auto_backup_email.start_time)|datetime('hm') }}" class="form-control">
+                            and
+                            <input name="auto_backup_email_end" type="time" pattern="[0-2][0-9]\:[0-5][0-9]" value="{{ (request.form.auto_backup_email_end or column.config.auto_backup_email.end_time)|datetime('hm') }}" class="form-control">
+                            every day, email the data in this column to:
+                            <input type="text" name="auto_backup_email_address" value="{{ request.form.auto_backup_email_address or column.config.auto_backup_email.email_target }}" class="form-control" />
+                        </span>
+                    </div>
+                </div>
+                {# Settings for VERY ADVANCED #}
+                <div class="form-group row collapse row_custom_options">
+                    <div class="col">
+                        <h5 class="border-top">Settings for ninjas</h5>
+                        <span>These settings are for super advanced users</span>
+                    </div>
+                </div>
+                {# TODO #}
+                <div class="form-group row collapse d-none" id="row_file_link">
+                    <label class="col-sm-2 col-form-label sres-form-label">File link</label>
+                    <div class="col-sm-10 form-inline">
+                        <label>Allow linking of files to each individual:</label>
+                        <select name="file_link_active" class="form-control ml-2 mr-2">
+                            <option value="false">Inactive</option>
+                            <option value="true" {% if (request.form.file_link_active or column.config.file_link) == 'true' %}selected{% endif %}>Active</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group row collapse row_custom_options">
+                    <label class="col-sm-2 col-form-label sres-form-label">Multiple reports mode</label>
+                    <div class="col-sm-10 form-inline">
+                        <label for="custom_options_multiple_reports_mode" class="mr-2">Allow multiple 'reports' to be saved into this column</label>
+                        <select name="custom_options_multiple_reports_mode" id="custom_options_multiple_reports_mode" class="form-control mr-2">
+                            <option value="disabled">Disabled (default)</option>
+                            <option value="enabled" {% if (request.form.custom_options_multiple_reports_mode or column.config.custom_options.multiple_reports_mode) == 'enabled' %}selected{% endif %}>Enabled</option>
+                        </select>
+                        <span class="fa fa-exclamation-triangle" data-tippy-content="Multiple reports can only be entered in standard data entry mode (i.e. not roll mode or bulk mode) and through portals, and can currently only be used for columns that have a datatype of multi-entry"></span>
+                    </div>
+                </div>
+                <div class="form-group row collapse row_custom_options" id="">
+                    <label class="col-sm-2 col-form-label sres-form-label">Enable as tag aggregation source</label>
+                    <div class="col-sm-10 form-inline">
+                        <label for="custom_options_use_for_tag_aggregation">Use this column as a source for tag aggregation</label>
+                        <select name="custom_options_use_for_tag_aggregation" id="custom_options_use_for_tag_aggregation" class="form-control ml-2">
+                            <option value="false">No</option>
+                            <option value="true" {% if (request.form.custom_options_use_for_tag_aggregation or column.config.custom_options.use_for_tag_aggregation) == 'true' or vars.TAG_AGGREGATION_ENABLED_BY_DEFAULT %}selected{% endif %}>Yes</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group row collapse row_custom_options" id="">
+                    <label class="col-sm-2 col-form-label sres-form-label">Column as additional identifier</label>
+                    <div class="col-sm-10 form-inline">
+                        <label for="custom_options_additional_identifier">This column contains additional alternative unique identifier</label>
+                        <select name="custom_options_additional_identifier" id="custom_options_additional_identifier" class="form-control ml-2">
+                            <option value="false">No</option>
+                            <option value="true" {% if (request.form.custom_options_additional_identifier or column.config.custom_options.additional_identifier) == 'true' %}selected{% endif %}>Yes</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group row collapse row_custom_options" id="">
+                    <label class="col-sm-2 col-form-label sres-form-label">Allow HTML</label>
+                    <div class="col-sm-10 form-inline">
+                        <label for="custom_options_allow_html">Allow raw HTML when substituting column references</label>
+                        <select name="custom_options_allow_html" id="custom_options_allow_html" class="form-control ml-2">
+                            <option value="false">No (clean all HTML - recommended)</option>
+                            <option value="strip" {% if (request.form.custom_options_allow_html or column.config.custom_options.allow_html) == 'strip' %}selected{% endif %}>No (strip all HTML tags)</option>                        	
+                            <option value="true" {% if (request.form.custom_options_allow_html or column.config.custom_options.allow_html) == 'true' %}selected{% endif %}>Yes (do not clean HTML when substituting)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group row collapse row_custom_options" id="">
+                    <label class="col-sm-2 col-form-label sres-form-label">Newline characters</label>
+                    <div class="col-sm-10 form-inline">
+                        <label for="custom_options_newline_character_conversion">Convert \n and \r 'newline' characters</label>
+                        <select name="custom_options_newline_character_conversion" id="custom_options_newline_character_conversion" class="form-control ml-2">
+                            <option value="disabled">No, leave as-is</option>
+                            <option value=" " {% if (request.form.custom_options_newline_character_conversion or column.config.custom_options.newline_character_conversion) == ' ' %}selected{% endif %}>Convert to space</option>                        	
+                            <option value="<br>" {% if (request.form.custom_options_newline_character_conversion or column.config.custom_options.newline_character_conversion) == '<br>' %}selected{% endif %}>Convert to line break</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group row collapse row_custom_options" id="">
+                    <label class="col-sm-2 col-form-label sres-form-label">Mojibake characters</label>
+                    <div class="col-sm-10 form-inline">
+                        <label for="custom_options_mojibake_conversion">Convert characters such as &ldquo; (smart double quote) and \u2019 (smart single quotation mark)</label>
+                        <select name="custom_options_mojibake_conversion" id="custom_options_mojibake_conversion" class="form-control ml-2">
+                            <option value="enabled">Yes</option>
+                            <option value="disabled" {% if (request.form.custom_options_mojibake_conversion or column.config.custom_options.mojibake_conversion) == 'disabled' %}selected{% endif %}>No, leave as-is</option>                        	
+                        </select>
+                    </div>
+                </div>
+                {# ACTIONS #}
+                <div class="form-group row">
+                    <div class="col">
+                        <input type="hidden" name="tableuuid" value="{{ table_uuid }}" />
+                        <input type="hidden" name="columnuuid" value="{{ column.config.uuid }}" />
+                        <input type="hidden" name="action" value="{{ vars.mode }}" />
+                        {% if not vars.collective_sharing %}
+                            <input type="submit" value="Save" name="submitButton" id="submitButton" class="btn btn-primary" />
+                            {% if vars.mode != 'new' %}
+                                <button type="button" id="cloneButton" class="btn btn-outline-secondary" data-sres-action="{{ url_for('table.clone_column', table_uuid=table_uuid, column_uuid=column.config.uuid) }}">
+                                    <span class="fa fa-clone" aria-hidden="true"></span>
+                                    Clone column
+                                </button>
+                                {# clone into different list #}
+                                <button type="button" id="cloneButtonOtherList" class="btn btn-outline-secondary" onclick="$('#clone_to_other_list').modal('show');">
+                                    <span class="fa fa-clone" aria-hidden="true"></span>
+                                    Clone column into another list
+                                </button>
+                                <a href="{{ url_for('collective.share_asset', asset_type='column', source_asset_uuid=column.config.uuid) }}" role="button" class="btn btn-outline-primary">
+                                    <span class="fa fa-share-alt"></span> Share to SRES Collective
+                                </a>
+                                {# delete column #}
+                                <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#confirm_delete">
+                                    <span class="fa fa-trash" aria-hidden="true"></span>
+                                    Delete column
+                                </button>
+                            {% endif %}
+                        {% else %}
+                            {{ collective_share.render_collective_action_buttons(vars.collective_sharing_asset, vars.collective_sharing_mode, vars) }}
+                        {% endif %}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    </main>
+    
+    {{ select_users.find_user() }}
+    {{ select_users.bulk_edit_users() }}
+    
+    {% import 'select-column.html' as select_column %}
+    {{ select_column.column_chooser(
+        available_tables=vars.authorised_tables,
+        student_info_items=vars.SYSTEM_COLUMNS,
+        magic_formatters_list=vars.MAGIC_FORMATTERS_LIST
+    ) }}
+    
+    <!-- modal for delete column -->
+    <div class="modal fade" id="confirm_delete" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Are you sure?</h4>
+                </div>
+                <div class="modal-body">
+                    <span class="fa fa-exclamation-triangle" aria-hidden="true"></span>
+                    Warning: all data currently in this column will be <strong>lost permanently</strong> if you proceed.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-dismiss="modal">Do not delete</button>
+                    <button type="button" id="deleteButton" class="btn btn-danger" data-sres-action="{{ url_for('table.delete_column', table_uuid=table_uuid, column_uuid=column.config.uuid) }}">Confirm delete</button>
+                </div>
+            </div>
+        </div>
+    </div>							
+    
+    <!-- modal for cloning into another list -->
+    <div class="modal fade" id="clone_to_other_list" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Select destination list</h4>
+                </div>
+                <div class="modal-body">
+                    <select id="clone_to_other_list_selector">
+                        {% for available_table in vars.authorised_tables %}
+                            <option value="{{ available_table.uuid }}">{{ available_table.code }} {{ available_table.name }} ({{ available_table.year }} semester {{ available_table.semester }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
+                    <button type="button" id="clone_to_other_list_button" class="btn btn-primary" data-sres-action="{{ url_for('table.clone_column', table_uuid=table_uuid, column_uuid=column.config.uuid) }}">Clone</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!--- modal for editing show/render calculated value sources --->
+    <div class="modal fade" tabindex="-1" role="dialog" id="modal_render_calculated_values_editor">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Choose the subfields that will be used</h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div id="render_calculated_values_editor_subfield_method_container">
+                        <div class="form-inline">
+                            <label>Calculate the:</label>
+                            <select class="form-control ml-2 mr-2" id="render_calculated_values_editor_method" data-sres-key="method" aria-label="Calculation method">
+                                <option value="sum">sum</option>
+                                <option value="average">average</option>
+                            </select>
+                            <label>of the following subfields:</label>
+                        </div>
+                    </div>
+                    <div class="mb-2 ml-4" id="render_calculated_values_editor_subfield_list">
+                    </div>
+                    <div id="render_calculated_values_editor_config">
+                        <div class="mb-2">
+                            <label for="render_calculated_values_editor_blank_treatment">What to do with blank or non-numeric values:</label>
+                            <select class="form-control" id="render_calculated_values_editor_blank_treatment" data-sres-key="blank_treatment">
+                                <option value="ignore">Ignore the subfield</option>
+                                <option value="convertzero">Convert to zero</option>
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <label for="render_calculated_values_editor_multiplier">Multiply final value by:</label>
+                            <input type="number" value="1" class="form-control" id="render_calculated_values_editor_multiplier" data-sres-key="multiplier">
+                        </div>
+                        <div>
+                            <label for="render_calculated_values_editor_rounding">Rounding:</label>
+                            <select class="form-control" id="render_calculated_values_editor_rounding" data-sres-key="rounding">
+                                <option value="no">no rounding</option>
+                                <option value="1">1 decimal point</option>
+                                <option value="2">2 decimal points</option>
+                                <option value="3">3 decimal points</option>
+                            </select>
+                        </div>
+                        {#
+                        <div>
+                            <label for="render_calculated_values_editor_render_direction">When rendering the calculated value in this subfield:</label>
+                            <select class="form-control" id="render_calculated_values_editor_render_direction" data-sres-key="render_direction">
+                                <option value="leave">leave as-is</option>
+                                <option value="lower">render as the lower option</option>
+                                <option value="higher">render as the higher option</option>
+                            </select>
+                        </div>
+                        #}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="modal_render_calculated_values_editor_confirm" data-sres-current-n="">
+                        Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+            
+    <!--- modal for editing selectable options list --->
+    <div class="modal fade" tabindex="-1" role="dialog" id="modal_select_from_list_editor">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Edit selectable options</h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div>
+                        <button type="button" class="btn btn-primary" id="select_from_list_add_option"><span class="fa fa-plus" aria-hidden="true"></span> Add an option</button>
+                        <br /><br />
+                        <div id="select_from_list_rows_container" class="well">
+                            <div id="select_from_list_row_template" class="row d-none sres-select-from-list-row form-group">
+                                <div class="col-sm-5">
+                                    <label>
+                                        What to display on the form
+                                        <span class="fa fa-info-circle" data-tippy-content="This is the 'text to display', i.e. the text that is going to be shown on a button, dropdown, slider, etc."></span>
+                                    </label>
+                                    <input type="textbox" class="form-control sres-select-from-list-row-display" value="" />
+                                </div>
+                                <div class="col-sm-4">
+                                    <label>
+                                        What to save in the database
+                                        <span class="fa fa-info-circle" data-tippy-content="This is the 'value to save', i.e. the text that is going to be saved into the database if a user selects this option."></span>
+                                    </label>
+                                    <input type="textbox" class="form-control sres-select-from-list-row-value" value="" />
+                                </div>
+                                <div class="col-sm-3">
+                                    <div class="pull-right">
+                                        <label>&nbsp;</label>
+                                        <br />
+                                        <button class="btn btn-light btn-sm sres-select-from-list-row-move-up" data-sres-direction="up" data-tippy-content="Move up"><span class="fa fa-chevron-up" aria-hidden="true"></span></button>
+                                        <button class="btn btn-light btn-sm sres-select-from-list-row-move-down" data-sres-direction="down" data-tippy-content="Move down"><span class="fa fa-chevron-down" aria-hidden="true"></span></button>
+                                        <button class="btn btn-light btn-sm sres-select-from-list-row-more-options-toggle" data-toggle="collapse" data-target="#select_from_list_row_more_options" data-tippy-content="Toggle more options"><span class="fa fa-ellipsis-h" aria-hidden="true"></span></button>
+                                        <button class="btn btn-light btn-sm sres-select-from-list-row-delete" data-tippy-content="Delete"><span class="fa fa-trash" aria-hidden="true"></span></button>
+                                    </div>
+                                </div>
+                                <div class="col-sm-9 collapse sres-select-from-list-row-more-options">
+                                    <div class="form-group">
+                                        <label>
+                                            Longer description
+                                            <span class="fa fa-info-circle" data-tippy-content="This is optional text that can be displayed to expand upon what is displayed on the form."></span>
+                                        </label>
+                                        <textarea class="form-control sres-select-from-list-row-description"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="modal_select_from_list_editor_confirm">Confirm</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+    
+    <!--- modal for selectable options warning --->
+    <div class="modal fade" tabindex="-1" role="dialog" id="modal_select_from_list_warning">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Potential issues detected</h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-primary" data-dismiss="modal">I'll fix it up</button>
+                    <button type="button" class="btn btn-outline-primary" id="modal_select_from_list_warning_proceed">Proceed anyway</button>
+                </div>
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+    
+{% endblock %}

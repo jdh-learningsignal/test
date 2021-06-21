@@ -1,0 +1,198 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+  Edit tags for column
+{% endblock %}
+
+{% block body %}
+
+<div class="row">
+  <div class="col">
+    <h2>Edit tags for column {{ column.config.name }}</h2>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-sm-8">
+    <h4>In {{ table.get_full_name() }}</h4>
+  </div>
+</div>
+
+{% if column.get_datatype_friendly()['name'] == 'Multi-entry' %}
+  {% for multientry_label,tags in multi_entry_labels_to_tags.items() %}
+
+    <div class="row">
+      <div class="col">
+        <div class="card-deck">
+
+            <div class="card bg-light">
+            <div class="card-header">Existing tags for the multi entry component: {{ multientry_label }}</div>
+            <div class="card-body">
+
+            {% for tag in tags %}
+                 <a href={{ url_for('tags.view_tag', tag_uuid=tag.uuid) }}">{{ tag.name }}</a>
+                 <form method="POST" action="{{ url_for('table.edit_column_tags', table_uuid=vars['table_uuid'], column_uuid=vars['column_uuid']) }}">
+                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                   <input type="hidden" name="action" value="remove_tag_from_multientry">
+                   <input type="hidden" name="multientry_label" value="{{ multientry_label }}">
+                   <input type="hidden" name="tag_objectid" value="{{ tag['_id'] }}">
+                   <button class="btn btn-sm btn-warning">Remove</button>
+                 </form>
+                 <br><br>
+            {% endfor %}
+
+          </div>
+          </div>
+
+          <div class="card bg-light">
+          <div class="card-header">Add more tags for the multi entry component: {{ multientry_label }}</div>
+          <div class="card-body">
+            <form method="POST" action="{{ url_for('table.edit_column_tags', table_uuid=vars['table_uuid'], column_uuid=vars['column_uuid']) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="add_tags_to_multientry">
+                <input type="hidden" name="multientry_label" value="{{ multientry_label }}">
+                 <div class="form-group row">
+                  <label class="col-sm-2 col-form-label sres-form-label">Tag group</label>
+                  <div class="col-sm-10">
+                    <select name="tag_groups" id="tag_groups_{{ multientry_label.replace(' ','_') }}" class="form-control">
+                      <option value="any_tag_group">--Any--</option>
+                      {% for tag_group in tag_groups %}
+                        <option id="{{ tag_group._id }}" value="{{ tag_group._id }}">{{ tag_group.name }}</option>
+                      {% endfor %}
+                      <option value="no_tag_group">--None--</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group row">
+                  <label class="col-sm-2 col-form-label sres-form-label">Tag name</label>
+                  <div class="col-sm-10">
+                    <select multiple name="tags_to_add_to_dropdown" id="tags_to_add_to_dropdown" class="form-control">
+                      {% for available_tag in vars['available_tags'][multientry_label] %}
+                        {% if available_tag['tag_group_id'] %}
+                          <option class="{{ multientry_label.replace(' ','_') }} tags {{ available_tag['tag_group_id'] }}" id="{{ available_tag['_id'] }}" value="{{ available_tag['_id'] }}">{{ available_tag['name'] }}</option>
+                        {% else %}
+                          <option class="{{ multientry_label.replace(' ','_') }} tags no_tag_group" id="{{ available_tag['_id'] }}" value="{{ available_tag['_id'] }}">{{ available_tag['name'] }}</option>
+                        {% endif %}
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group row">
+                   <label class="col-sm-2 col-form-label sres-form-label">&nbsp;</label>
+                   <div class="col-sm-10">
+                     <button class="btn btn-primary">Add</button>
+                   </div>
+                </div>
+
+                <script>
+                  $('#tag_groups_{{ multientry_label.replace(' ','_') }}').change(function() {
+                    tag_group_objectid=$(this).val();
+                    $('.{{ multientry_label.replace(' ','_') }}.tags').css('display','none');
+                    if (tag_group_objectid=='no_tag_group') { tags_to_show = $('.{{ multientry_label.replace(' ','_') }}.no_tag_group');          }
+                    else if (tag_group_objectid=='any_tag_group') { tags_to_show = $('.{{ multientry_label.replace(' ','_') }}' );                }
+                    else                                    { tags_to_show = $('.{{ multientry_label.replace(' ','_') }}.' + tag_group_objectid); }
+                    tags_to_show.css('display','block');
+                  });
+                </script>
+
+            </form>
+
+          </div>
+          </div>
+
+
+        </div>
+     </div>
+  </div>
+  <br>
+
+  {% endfor %}
+
+{% else %}
+
+  <div class="row">
+    <div class="col">
+      <div class="card-deck">
+
+          <div class="card bg-light">
+          <div class="card-header">Existing tags for this column</div>
+          <div class="card-body">
+
+            {% for tag in vars['tags'] %}
+                 <a href={{ url_for('tags.view_tag', tag_uuid=tag.uuid) }}">{{ tag.name }}</a>
+                 <form method="POST" action="{{ url_for('table.edit_column_tags', table_uuid=vars['table_uuid'], column_uuid=vars['column_uuid']) }}">
+                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                   <input type="hidden" name="action" value="remove_tag_from_column">
+                   <input type="hidden" name="tag_objectid" value="{{ tag['_id'] }}">
+                   <button class="btn btn-sm btn-warning">Remove</button>
+                 </form>
+                 <br><br>
+            {% endfor %}
+
+          </div>
+          </div>
+
+          <div class="card bg-light">
+          <div class="card-header">Add more tags for this column</div>
+          <div class="card-body">
+            <form method="POST" action="{{ url_for('table.edit_column_tags', table_uuid=vars['table_uuid'], column_uuid=vars['column_uuid']) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+               <input type="hidden" name="action" value="add_more_tags_to_column">
+                 <div class="form-group row">
+                  <label class="col-sm-2 col-form-label sres-form-label">Tag group</label>
+                  <div class="col-sm-10">
+                    <select name="tag_groups" id="tag_groups" class="form-control">
+                      <option value="any_tag_group">--Any--</option>
+                      {% for tag_group in tag_groups %}
+                        <option id="{{ tag_group._id }}" value="{{ tag_group._id }}">{{ tag_group.name }}</option>
+                      {% endfor %}
+                      <option value="no_tag_group">--None--</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group row">
+                  <label class="col-sm-2 col-form-label sres-form-label">Tag name</label>
+                  <div class="col-sm-10">
+                    <select multiple name="tags_to_add_to_dropdown" id="tags_to_add_to_dropdown" class="form-control">
+                      {% for available_tag in vars['available_tags'] %}
+                        {% if available_tag['tag_group_id'] %}
+                          <option class="tags {{ available_tag['tag_group_id'] }}" id="{{ available_tag['_id'] }}" value="{{ available_tag['_id'] }}">{{ available_tag['name'] }}</option>
+                        {% else %}
+                          <option class="tags no_tag_group" id="{{ available_tag['_id'] }}" value="{{ available_tag['_id'] }}">{{ available_tag['name'] }}</option>
+                        {% endif %}
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group row">
+                   <label class="col-sm-2 col-form-label sres-form-label">&nbsp;</label>
+                   <div class="col-sm-10">
+                     <button class="btn btn-primary">Add</button>
+                   </div>
+                </div>
+
+                <script>
+                  $('#tag_groups').change(function() {
+                    tag_group_objectid=$(this).val();
+                    $('.tags').css('display','none');
+                    if (tag_group_objectid=='no_tag_group') { tags_to_show = $('.no_tag_group');          }
+                    else if (tag_group_objectid=='any_tag_group') { tags_to_show = $('.tags');            }
+                    else                                    { tags_to_show = $('.' + tag_group_objectid); }
+                    tags_to_show.css('display','block');
+                  });
+                </script>
+
+            </form>
+
+          </div>
+          </div>
+
+
+        </div>
+     </div>
+  </div>
+
+{% endif %}
+
+{% endblock %}
+

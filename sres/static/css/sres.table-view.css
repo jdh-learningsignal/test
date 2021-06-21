@@ -1,0 +1,175 @@
+/* utilities */
+.glyphicon-90cw {
+    transform: rotate(90deg);
+}
+
+span.label a span.glyphicon {
+    color: #FFF;
+}
+
+.tooltip > .tooltip-inner {
+    background-color: #FFF;
+    color: #000;
+}
+.tooltip > .tooltip-arrow {
+    background-color: #FFF;
+}
+
+/* main table */
+.sres-column-title-sm {
+    .font-size: small;
+}
+.sres-column-title-xs {
+    font-size: x-small;
+}
+.sres-column-info {
+    font-weight: normal;
+    font-size: 0.8em;
+}
+.sres-row-active {
+    color: #000;
+}
+.sres-row-inactive {
+    color: #999;
+}
+.sres-cell-highlight-target {
+    border: 2px solid #31708f !important;
+}
+td span.sres-cell-data-error {
+    font-style: italic;
+    color: #a94442;
+}
+.sres-cell-actions {
+    z-index:2000 !important;
+    padding-left: 3px;
+}
+img.sres-td-image, img.sres-td-imgurl {
+    max-height: 0.8em;
+}
+.sres-column-search {
+    font-size: smaller;
+    padding-top: 5px; 
+}
+table.sres-main-table tbody tr td.sres-column-data {
+    font-size: 0.8em;
+    vertical-align: top !important;
+    width: 135px;
+}
+.sres-cell-truncated {
+    white-space: nowrap !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.sres-cell-not-truncated {
+    white-space: normal !important;
+    //overflow: hidden;
+    //text-overflow: ellipsis;
+}
+table.sres-main-table tbody tr td.sres-systemcolumn-data {
+    font-size: 0.8em;
+    word-break: break-all;
+    //white-space: normal !important;
+    //overflow: visible !important;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 80px;
+    vertical-align: top !important;
+}
+table.sres-main-table td.sres-actioncolumn, table.sres-main-table th.header_actions {
+    width: 35px;
+    font-size: 0.7rem;
+    overflow: visible;
+}
+table.sres-main-table th.sres-searchable-column.sres-systemcolumn-data input.sres-column-search {
+    width: 80px;
+}
+table.sres-main-table th.sres-searchable-column.sres-column-data input.sres-column-search {
+    width: 135px;
+}
+table.sres-main-table {
+    table-layout: fixed;
+    margin: 0 auto;
+    clear: both;
+    word-wrap: break-word;
+}
+.dataTables_wrapper .dataTables_processing {
+    background: #d9edf7 !important;
+    color: #31708f !important;
+    height: auto !important;
+    z-index: 1000 !important;
+}
+table.sres-main-table thead th {
+    word-break: break-word;
+}
+div.DTFC_LeftBodyLiner {
+    overflow-x: hidden !important; /* Fix for firefox */
+}
+
+/* column options */
+table.sres-main-table th .sres-column-options-container {
+    position: absolute !important;
+    top: 1rem;
+    right: 1rem;
+    z-index: 0;
+}
+.dataTables_scrollBody .sres-column-options-container {
+    display: none;
+}
+
+/* main menu controls */
+.sres-datatables-length-menu {
+    padding-top: 0.85em;
+}
+.sres-datatables-column-jumper-container .algolia-autocomplete {
+    width: 50%;
+}
+
+/* editables */
+.editable-input, .editable-buttons {
+    margin: 5px;
+    z-index: 1000 !important;
+    position: relative !important;
+}
+.editable-input .editable-clear-x {
+    margin-right: 10px;
+}
+.editable-click {
+    border-bottom: 0 !important;
+}
+.sres-editable-inputclass {
+    width: 300px !important;
+}
+
+/* change history display */
+.sres-change-history-data-display {
+    max-width: 25rem !important;
+    max-height: 5rem !important;
+    overflow: auto;
+    overflow-wrap: break-word;
+}
+
+/* dragging */
+body.dragging, body.dragging * {
+    cursor: move !important;
+}
+.dragged {
+    position: absolute;
+    opacity: 0.5;
+    z-index: 2000;
+}
+ul.sortable {
+    list-style-type: none;
+}
+ul.sortable li.placeholder {
+    position: relative;
+    height: 5px;
+    border: 1px solid #CCC;
+}
+span.sres-sortable-handle {
+    cursor: move;
+}
+
+
+
+
+

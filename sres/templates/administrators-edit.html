@@ -1,0 +1,98 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+    Edit administrators
+{% endblock %}
+
+{% block head_css2 %}
+{% endblock %}
+
+{% block head_js2 %}
+    <script>
+        $(document).ready(function(){
+            $("#authorised_list_administrators").chosen({
+                width: '100%',
+                no_results_text: 'Please use the button to add users',
+                placeholder_text_multiple: 'Please use the button to add users'
+            });
+            $("#authorised_filter_administrators").chosen({
+                width: '100%',
+                no_results_text: 'Please use the button to add users',
+                placeholder_text_multiple: 'Please use the button to add users'
+            });
+            $("#authorised_super_administrators").chosen({
+                width: '100%',
+                no_results_text: 'Please use the button to add users',
+                placeholder_text_multiple: 'Please use the button to add users'
+            });
+        });
+    </script>
+{% endblock %}
+
+{% block body %}
+    
+    {% import 'select-users.html' as select_users %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col">
+            <h2>Edit administrators</h2>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col">
+            <form method="post" action="{{ url_for('admin.edit_administrators') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="nonce" value="{{ vars.nonce }}">
+                {% for category, category_config in vars.ADMIN_CATEGORIES.items() %}
+                    <div class="form-group row">
+                        <div class="col">
+                            <label class="sres-form-label">{{ category_config.display }}</label>
+                            {{ select_users.select_user_fields(
+                                    id='{}_administrator'.format(category), 
+                                    usernames=request.form['authorised_{}_administrators'.format(category)] or vars['{}_administrators'.format(category)]
+                                )
+                            }}
+                        </div>
+                    </div>
+                {% endfor %}
+                <div class="form-group row">
+                    <label class="col-sm-3 col-form-label sres-form-label">Save</label>
+                    <div class="col-sm-9">
+                        <button class="btn btn-primary">Save</button>
+                    </div>
+                </div>
+            </form>
+            <form method="POST" action="{{ url_for('admin.edit_administrators') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="make_list">
+                <div class="form-group row">
+                    <label class="col-sm-3 col-form-label sres-form-label">Make list</label>
+                    <div class="col-sm-9">
+                        <input type="text" name="make_list_existing_uuid" value="" class="form-control" placeholder="UUID of existing list (optional) - if not supplied, a new list will be created">
+                        <button class="btn btn-outline-primary">Make list</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    {{ select_users.find_user() }}
+    {{ select_users.bulk_edit_users() }}
+    
+{% endblock %}

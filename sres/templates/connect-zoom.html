@@ -1,0 +1,211 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+    Connect Zoom to {{ table.config.code }}
+{% endblock %}
+
+{% block head_css2 %}
+    <style>
+        .sres-refresh-now button:disabled {
+            cursor: not-allowed;
+        }
+    </style>
+{% endblock %}
+
+{% block head_js2 %}
+    <script>
+        ENV['FORCE_REFRESH_ENDPOINT'] = "{{ url_for('table.connect_lms_refresh', table_uuid=table.config.uuid, lms='zoom', connection_type='__connection_type__', connection_index='__connection_index__')|safe }}";
+        ENV['SRES_USER'] = {{ get_sres_user_details()|tojson }};
+        ENV['ZOOM_USER'] = {{ vars.zoom_user|tojson }};
+        ENV['ZOOM_MEETINGS'] = {{ vars.user_meetings|tojson }};
+        for (index = 0; index < ENV['ZOOM_MEETINGS'].length; index++) {
+            let meeting_time_start = ENV['ZOOM_MEETINGS'][index]['start_time'];
+            let m = moment(meeting_time_start);
+            ENV['ZOOM_MEETINGS'][index]['start_time_local'] = m.toLocaleString();
+            /*if (moment(meeting_time_start).diff(moment()) > 0) {
+                // future
+                ENV['ZOOM_MEETINGS'][index]['relative_time_string'] = m.toNow();
+            } else {
+                // past
+                ENV['ZOOM_MEETINGS'][index]['relative_time_string'] = m.fromNow();
+            }*/
+        }
+        ENV['EXISTING_COLUMNS'] = {{ vars.all_columns|tojson }};
+        var sresZoomConnections = {{ vars.existing_connections|tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ajaxq.js') }}"></script>
+    {% raw %}
+        <script id="connection-mapper-template" type="text/x-handlebars-template">
+            <div class="col-sm-12 py-2 sres-card-container">
+                <div class="card h-100 bg-light sres-connection-configuration-card" data-sres-counter="{{counter}}">
+                    <input type="hidden" name="connection_workflow_state_{{counter}}" value="">
+                    <div class="card-header">
+                        Zoom connection - past meeting participants
+                        <span class="sres-connection-header-title float-left"></span>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-warning sres-connection-by-another-user-warning d-none">
+                            <span class="fa fa-info-circle"></span>
+                            This connection contains meetings that are hosted by another administrator of this list.
+                            You can still sync data from Zoom using this connection, but try not to modify it.
+                        </div>
+                        <div class="form-group mb-2">
+                            <label class="sres-form-label" for="">Select Zoom meeting(s)</label>
+                            <select class="sres-zoom-meetings" multiple name="connection_source_zoom_meetings_{{counter}}">
+                                {{#each zoom_meetings}}
+                                    <option value="{{uuid}}">
+                                        {{topic}} ({{id}}) [{{start_time_local}}]
+                                    </option>
+                                {{/each}}
+                            </select>
+                        </div>
+                        <div class="form-group mb-0">
+                            <label class="sres-form-label" for="">Save data into column</label>
+                            <span class="btn-group btn-group-toggle" data-toggle="buttons">
+                                <label class="btn btn-outline-secondary active" title="Do not import" data-tippy-content="Do not import">
+                                    <input type="radio" name="connection_column_action_{{counter}}" value="noimport" class="sres-import-action-choose" checked><span class="fa fa-ban"></span>&nbsp;Do not import
+                                </label>
+                                <label class="btn btn-outline-success" title="New column" data-tippy-content="Create a new column in the list, and then save data into that">
+                                    <input type="radio" name="connection_column_action_{{counter}}" value="new" class="sres-import-action-choose"><span class="fa fa-plus"></span>&nbsp;New column
+                                </label>
+                                <label class="btn btn-outline-primary" title="Existing column" data-tippy-content="Save data into an existing column in the list">
+                                    <input type="radio" name="connection_column_action_{{counter}}" value="existing" class="sres-import-action-choose"><span class="fa fa-arrow-alt-circle-down"></span>&nbsp;Existing column
+                                </label>
+                            </span>
+                            <span class="sres-import-destination-config sres-import-destination-select">
+                                <select name="connection_column_destination_{{counter}}" id="connection_column_destination_{{counter}}" class="form-control d-none sres-import-destination-config sres-import-destination-select mt-2">
+                                    {{#each destination_columns}}
+                                        <option value="{{this.uuid}}" data-sres-datatype="{{this.type}}">
+                                            {{this.name}}
+                                        </option>
+                                    {{/each}}
+                                </select>
+                            </span>
+                            <input type="text" placeholder="Name of new column" data-tippy-content="Enter a name to call this column."
+                                name="connection_column_new_name_{{counter}}" id="connection_column_new_name_{{counter}}" 
+                                class="form-control d-none sres-import-destination-config sres-import-destination-name w-100 mt-2">
+                        </div>
+                    </div>
+                    <div class="card-footer text-muted">
+                        <span class="sres-refresh-now">
+                            <button type="button" class="btn btn-sm btn-outline-primary sres-connection-sync-now" {{#if save_disabled}}disabled{{/if}} data-sres-connection-type="{{connection_type}}">
+                                <span class="fa fa-sync-alt sres-refresh-now-spinner"></span>
+                                Import data now
+                            </button>
+                        </span>
+                        <span class="sres-refresh-now-warning">
+                            Enable and <a href="#" class="sres-action-buttons-jump">save</a> connections first.
+                        </span>
+                        <span class="float-right">
+                            <button type="button" class="btn btn-sm btn-secondary sres-connection-delete" aria-label="Delete connection" data-tippy-content="Delete connection"><span class="fa fa-trash"></span></button>
+                        </span>
+                    </div>
+                </div>
+            </div>
+            
+        </script>
+    {% endraw %}
+    <script src="{{ url_for('static', filename='js/sres.connect-zoom.js', rand=range(1000,9999)|random|string) }}"></script>
+{% endblock %}
+
+{% block body %}
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <main>
+    
+    <h1>Connect Zoom to {{ table.get_full_name() }}</h1>
+    
+    <div class="alert alert-danger">
+        <span class="fa fa-user-ninja" aria-hidden="true"></span>
+        This feature is experimental and is for testing only.
+        Using this, you authorise the SRES to use the provided credentials to access relevant data and indemnify the SRES and its creators of any liability.
+    </div>
+    
+    <div class="alert alert-warning">
+        <span class="fa fa-exclamation-triangle" aria-hidden="true"></span>
+        Connections can be saved by you and other administrators on this page.
+        Imports must be <strong>manually</strong> triggered from this page using the 'Import data now' buttons - there is no automatic scheduled synchronisation due to the variability and once-off nature of individual Zoom meeting instances.
+    </div>
+    
+    <form method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div class="row">
+            <div class="col">
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">
+                        Authorisation
+                        <a href="#authorisation_container" data-toggle="collapse" aria-expanded="{% if vars.auth_token %}false{% else %}true{% endif %}" aria-label="Show/hide authorisation"><span class="fa fa-angle-down sres-collapse-caret"></span></a>
+                    </label>
+                    <div class="col-sm-10 collapse {% if not vars.auth_token or vars.token_error %}show{% endif %}" id="authorisation_container">
+                        {% if vars.auth_token and not vars.token_error %}
+                            <div class="alert alert-info">
+                                <span class="fa fa-check"></span> You have already authorised the SRES to connect to Zoom.
+                            </div>
+                        {% else %}
+                            <div class="alert alert-warning">
+                                <span class="fa fa-times"></span> SRES has not yet been properly authorised to connect to Zoom.
+                            </div>
+                        {% endif %}
+                        {% if vars.token_error and vars.auth_token %}
+                            <div class="alert alert-danger">
+                                <span class="fa fa-times"></span> There appears to be an issue with authorisation to Zoom. Please check your token or connection. It may have expired, or be incomplete.
+                            </div>
+                        {% endif %}
+                        <div class="mb-2">
+                            <a href="{{ zoom_connector.get_oauth2_login_url(table.config.uuid) }}" class="btn btn-primary" role="button">Authorise SRES to connect to Zoom</a>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if vars.auth_token and not vars.token_error %}
+                    
+                    <div class="form-group row">
+                        <label class="col-sm-2 col-form-label sres-form-label">New connection</label>
+                        <div class="col-sm-10">
+                            {% for connection_meta in vars.CONNECTION_META %}
+                                <button type="button" class="btn btn-success sres-connection-new" data-sres-connection-type="{{ connection_meta.type }}" data-tippy-content="{{ connection_meta.hint }}"><span class="fa fa-plus"></span> New connection: {{ connection_meta.display }}</button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div class="form-group row">
+                        <label class="col-sm-2 col-form-label sres-form-label">Existing connections</label>
+                        <div class="col-sm-10">
+                            <input type="text" class="form-control mb-3" placeholder="Search for an existing connection..." id="connection_filter" aria-label="Search for an existing connection">
+                            <div class="row" id="connections_container">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group row">
+                        <label class="col-sm-2 col-form-label sres-form-label">Save connections</label>
+                        <div class="col-sm-10">
+                            <a name="action_buttons">
+                            <button type="submit" name="submit_action" value="update" class="btn btn-primary" id="update_connection">Save</button>
+                        </div>
+                    </div>
+                    
+                {% endif %}
+                
+            </div>
+        </div>
+    </form>
+    
+    </main>
+    
+{% endblock %}

@@ -1,0 +1,87 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+    My account
+{% endblock %}
+
+{% block head_css2 %}
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.me.js') }}"></script>
+    <script>
+        ENV['API_KEY_ENDPOINT'] = "{{ url_for('me.my_api_keys') }}";
+    </script>
+    {% raw %}
+        <script id="api_key_row_template" type="text/x-handlebars-template">
+            <div class="sres-api-key-row mb-2" data-sres-key-uuid="{{uuid}}">
+                <span class="sres-form-label">Key</span>
+                <code class="sres-api-key sres-selectall-on-click">{{key}}</code>
+                <span class="sres-api-key-description">{{description}}</span>
+                <span class="font-italic">This full key will only appear once - make sure you copy it somewhere safe</span>
+                <button type="button" class="btn btn-outline-danger sres-api-key-delete">Delete</button>
+            </div>
+        </script>
+    {% endraw %}
+{% endblock %}
+
+{% block body %}
+
+{% include 'flash_messages.html' %}
+
+<div class="row">
+    <div class="col">
+        <h1>My SRES account</h1>
+        
+        <h2>My details</h2>
+        <dl>
+            <dt>Given names</dt>
+            <dd>{{ vars.user_config.given_names }}</dd>
+            <dt>Surname</dt>
+            <dd>{{ vars.user_config.surname }}</dd>
+            <dt>Email</dt>
+            <dd>{{ vars.user_config.email }}</dd>
+            <dt>Username</dt>
+            <dd>{{ vars.user_config.username }}</dd>
+            <dt>SRES permissions</dt>
+            {% if vars.user_config.permissions %}
+                <dd>{{ vars.user_config.permissions|join(', ') }}</dd>
+            {% else %}
+                <dd>No permissions in SRES</dd>
+            {% endif %}
+        </dl>
+        
+        <h2>My API keys</h2>
+        
+        
+        <div id="api_keys_container" class="mb-3">
+            {% for k in vars.api_keys %}
+                <div class="sres-api-key-row mb-2" data-sres-key-uuid="{{ k.uuid }}">
+                    <span class="sres-form-label">Key</span>
+                    <code class="sres-api-key">{{ k.key }}</code>
+                    <span class="sres-api-key-description">{{ k.description }}</span>
+                    <span class="sres-api-key-created font-italic">Created on {{ k.created|datetime('datetime') }}</span>
+                    <button type="button" class="btn btn-outline-danger sres-api-key-delete">Delete</button>
+                </div>
+            {% else %}
+                No API keys created yet.
+            {% endfor %}
+        </div>
+        
+        <div>
+            <div class="input-group mb-3">
+                <div class="input-group-prepend">
+                    <label class="input-group-text">Create a new API key:</label>
+                </div>
+                <input type="text" class="form-control" placeholder="Enter a brief description for this API key" id="new_api_key_description">
+                <div class="input-group-append">
+                    <button type="button" class="btn btn-outline-primary" id="new_api_key">Create new key</button>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+</div>
+
+{% endblock %}

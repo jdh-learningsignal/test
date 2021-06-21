@@ -1,0 +1,186 @@
+SECRET_KEY = "dev"
+
+PERMANENT_SESSION_LIFETIME = 6 * 3600
+
+SERVER_NAME = '127.0.0.1:5000'
+
+REVERSE_PROXY_ACTIVE = False
+REVERSE_PROXY_APPLICATION_ROOT = '/'
+REVERSE_PROXY_SCHEME = 'https'
+REVERSE_PROXY_SERVER = 'sres.uni.edu.au'
+
+MONGO_URI = "mongodb://localhost:27017/sres"
+MONGO_CONNECTION = "mongodb://localhost:27017/"
+MONGO_DB = "sres"
+
+MAIL_SERVER = 'smtp.uni.edu.au'
+MAIL_PORT = 25
+MAIL_SUPPRESS_SEND = False # True for debug
+
+SRES = {
+    'SERVER_NUMBER': 1,
+    'ENC_KEY': '', # base64-encoded 128-bit key e.g. base64.b64encode(os.urandom(16))
+    'DEFAULT_SALT': '', # any string e.g. ''.join(random.SystemRandom().choice(string.ascii_letters + string.digits) for _ in range(48))
+    'NOREPLY_EMAIL': 'noreply@sres.io',
+    'FAVICON_URL': 'https://uni.edu.au/favicon.ico',
+    'ALLOW_FIRST_USER_AUTO_REGO': False,
+    'GOOGLE_ANALYTICS_PROPERTY_CODE': '',
+    'LOGS': {
+        'ROOT': 'sres.log', # can be a full path
+        'DATA': 'sres_data.log' # can be a full path
+    },
+    'PROXIES': {
+        #'http': 'web-cache.uni.edu.au:8080',
+        #'https': 'web-cache.uni.edu.au:8080'
+    },
+    'EXTRA_MIME_TYPES_FILES': None, # e.g. ['C:/Apache24/conf/mime.types']
+    'LMS': {
+        'canvas': {
+            'enabled': True,
+            'config': {
+                'methods': ['oauth2','token'],
+                'base_url': 'https://canvas.uni.edu.au',
+                'api_path': '/api/v1/', # must have trailing slash
+                'oauth2': {
+                    'oauth2_endpoint': '',
+                    'token_endpoint': '',
+                    'client_id': '',
+                    'client_secret': '',
+                    'redirect_uri': ''
+                },
+                'override_auth_token': '',
+                'admin_auth_token': '',
+                'id_map': {
+                    'sid': 'sis_user_id',
+                    'username': 'sis_login_id'
+                }
+            }
+        },
+        'zoom': {
+            'enabled': True,
+            'config': {
+                'base_url': 'https://api.zoom.us', # this is standard across all Zoom users
+                'api_path': '/v2/', # must have trailing slash
+                'oauth2': {
+                    'installation_url': "https://zoom.us/oauth/authorize?response_type=code&client_id=xxxxx&redirect_uri=https%3A%2F%2Fsres.uni.edu.au%2Fconnect%2Fzoom",
+                    'oauth2_endpoint': 'https://zoom.us/oauth/authorize',
+                    'token_endpoint': 'https://zoom.us/oauth/token',
+                    'client_id': '', 
+                    'client_secret': '', 
+                    'redirect_uri': 'https://sres.uni.edu.au/connect/zoom'
+                }
+            }
+        }
+    },
+    'AUTHENTICATION': {
+        'ENABLED_METHODS': ['SAML2', 'LDAP', 'FALLBACK'],
+        'CONFIG': {
+            'LDAP': {
+                'SERVER': 'ldap://server.uni.edu.au',
+                'DN_BASE': 'ou=people,dc=uni,dc=edu,dc=au',
+                'BIND_USERNAME': '',
+                'BIND_PASSWORD': '',
+                'USERNAME_PREFIX': '',
+                'USERNAME_SUFFIX': '',
+                'SEARCH_REQUEST_ATTRIBUTES': "displayName,uid,cn,mail,givenName,sn,extensionAttribute1",
+                'USERNAME_ATTRIBUTE': "cn",      
+                'IDENTIFIER_ATTRIBUTE': "extensionAttribute1",
+                'GIVENNAME_ATTRIBUTE': "givenName",
+                'SURNAME_ATTRIBUTE': "sn",
+                'EMAIL_ATTRIBUTE': "mail",
+                'DISPLAYNAME_ATTRIBUTE': "displayName",
+                'FILTER_PATTERN_SIMPLE_NAME': "(|(&(displayName=$fn$*)(sn=$sn$*))(cn=$term$*))",
+                'FILTER_PATTERN_DEFAULT': "(|(displayName=$term$*)(cn=$term$*))"
+            },
+            'JWT': {},
+            'SAML2': {
+                'SAML_PATH': '/var/www/pysres/instance/saml',
+                'ATTRIBUTE_NAMES': {
+                    'email': 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress',
+                    'given_names': 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname',
+                    'surname': 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname',
+                    'sid': 'studentid'
+                }
+            }
+        },
+        'SEARCH_RESULTS': {
+            'SEARCH_RESULT_USE_FIELD': 'username',
+            'SEARCH_RESULT_DISPLAY_FIELD': 'display_name'
+        }
+    },
+    'LTI': {
+        'ENABLED': True,
+        'LAUNCH_PARAMS_MAPPING': {
+            'USERNAME': 'custom_person_username',
+            'SID': 'custom_person_sid',
+            'EMAIL': 'custom_person_email',
+            'GIVEN_NAMES': 'lis_person_name_given',
+            'SURNAME': 'lis_person_name_family',
+            'DISPLAY_NAME': 'lis_person_name_full'
+        },
+        'CONSUMER_PARAMS': {
+            'COURSE_ID': 'custom_canvas_course_id'
+        },
+        'WHITELISTED_DOMAINS': ['lms.uni.edu.au', 'uni.lms.com'],
+        'TITLE': 'Student Relationship Engagement System',
+        'TITLE_INSERT': 'SRES asset'
+    },
+    'URL_SHORTENING': {
+        'BITLY': {
+            'ACCESS_TOKEN': "",
+            'API_ENDPOINT_ROOT': "https://api-ssl.bitly.com/v4/",
+            'DOMAIN': "bit.ly"
+        }
+    },
+    'FEATURES': {
+        'TAG_AGGREGATION': {
+            'ENABLED_BY_DEFAULT': False
+        }
+    },
+    'LOCALISATIONS': {
+        'FORMATTING': {
+            'FONT_FORMATS': 'Andale Mono=andale mono,monospace,times;Arial=arial,helvetica,sans-serif;Arial Black=arial black,avant garde;Comic Sans MS=comic sans ms,sans-serif;Courier New=courier new,courier;Georgia=georgia,palatino;Helvetica=helvetica;Impact=impact,chicago;Tahoma=tahoma,arial,helvetica,sans-serif;Times New Roman=times new roman,times;Trebuchet MS=trebuchet ms,geneva;Verdana=verdana,geneva'
+        },
+        'LIST_EDIT': {
+            'DEFAULT_POPULATE_FROM_OPTION': 'autoList' # one of the options of table-edit.html #populate_student_list_from
+        }
+    },
+    'PATHS': {
+        # These are deprecated and can be ignored
+        'FILES': 'e:/data/files/',
+        'TEMP': 'e:/data/temp/',
+    },
+    'STRINGS': {
+        # These are deprecated and are now set using translation files
+        'unit_of_study': 'Unit',
+        'user_search_placeholder': 'Search for a person',
+        'user_search_use_text_button': 'Use entered username',
+        'institution_id_types': "SID, email, unikey"
+    },
+    'BABEL_DEFAULT_LOCALE': 'en',
+    'HELPBOX': {
+        'HTML': """
+            <div class="mb-3">The <a href="https://bit.ly/sres-tutorials-1" target="_blank">SRES user tutorial</a> is available online.</div>
+            <div class="">If you have any problems, please contact our friendly helpdesk.</div>
+        """,
+        'HTML_PAGE': """""" # If non-empty, will override the default help text present. Accepts full HTML.
+    }
+}
+
+#Configuration for LTI
+PYLTI_CONFIG = {
+    'consumers': {
+        'devconsumer': {
+            "secret": 'devsecret'
+        }
+        # Feel free to add more key/secret pairs for other consumers.
+    },
+    'roles': {
+        # Maps values sent in the lti launch value of "roles" to a group
+        # Allows you to check LTI.is_role('admin') for your user
+        'admin': ['Administrator', 'urn:lti:instrole:ims/lis/Administrator'],
+        'instructor': ['Instructor', 'urn:lti:instrole:ims/lis/Instructor'],
+        'student': ['Student', 'Learner', 'urn:lti:instrole:ims/lis/Student', 'urn:lti:instrole:ims/lis/Learner']
+    }
+}
+

@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block title %}
+    Feedback
+{% endblock %}
+
+{% block body %}
+    
+    {% if vars.mode == 'post' %}
+        <div class="row mt-3">
+            <div class="col">
+                <div class="alert alert-success">
+                    Thank you for taking time to provide your feedback, we really appreciate it.
+                </div>
+            </div>
+        </div>
+    {% elif vars.mode == 'get' %}
+        <div class="row mt-3">
+            <div class="col">
+                <div class="alert alert-info">
+                    {{ vars.prompt }}
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col">
+                <form method="post" action="{{ url_for('tracking.feedback', log_uuid=vars.log_uuid) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="i" value="{{ vars.feedback_log_id }}">
+                    <input type="hidden" name="l" value="{{ vars.log_uuid }}">
+                    <input type="hidden" name="t" value="{{ vars.source_asset_type }}">
+                    <input type="hidden" name="u" value="{{ vars.source_asset_uuid }}">
+                    <textarea class="form-control" name="c" rows="5" autofocus></textarea>
+                    <br />
+                    <input type="submit" class="btn btn-primary" value="Submit feedback" />
+                </form>
+            </div>
+        </div>
+    {% endif %}
+    
+{% endblock %}

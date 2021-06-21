@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="shortcut icon" href="{{ config.SRES.FAVICON_URL }}">
+    <title>{% block title %}{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/animate.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/all.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/bootstrap4-toggle.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    {% block head_css1 %}{% endblock %}
+    {% block head_css2 %}{% endblock %}
+    <script src="{{ url_for('static', filename='js/jquery.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/js.cookie.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/bootstrap4-notify.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/bootstrap4-toggle.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/autosize.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/moment.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/url.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jquery.insert-at-caret.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tippy.all.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/he.js') }}"></script>
+    <script>
+        function refreshTooltips(){
+            tippy('[data-tippy-content]', {
+                //animation: 'scale'
+                animateFill: false,
+                animation: false,
+                duration: [0, 0],
+                delay: [250, 0]
+            });
+        }
+        $(document).ready(function(){
+            refreshTooltips();
+            /*$('[data-toggle="tooltip"]').tooltip({
+                container: 'body',
+                html: true,
+                template: '<div class="tooltip" role="tooltip"><div class="arrow"></div><div class="tooltip-inner"></div></div>'
+            });*/
+            // textarea resizer
+            autosize($('textarea'));
+        });
+    </script>
+    <script>
+        var ENV = {};
+        ENV['CSRF_TOKEN'] = '{{ csrf_token() }}';
+        ENV['PING_ENDPOINT'] = '{{ url_for("login.ping", _external=True) }}';
+        ENV['HEADLESS_LOGIN_ENDPOINT'] = '{{ url_for("login.login", headless="login", next=url_for("login.login", headless="login", _external=True), _external=True)|safe }}';
+        /*$.ajaxSetup({
+            beforeSend: function(xhr, settings) {
+                if (!/^(GET|HEAD|OPTIONS|TRACE)$/i.test(settings.type) && !this.crossDomain) {
+                    xhr.setRequestHeader("X-CSRFToken", ENV['CSRF_TOKEN']);
+                }
+            }
+        });*/
+        var o = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(){
+            var res = o.apply(this, arguments);
+            var err = new Error();
+            this.setRequestHeader('X-CSRFToken', ENV['CSRF_TOKEN']);
+            return res;
+        }   
+    </script>
+    <script>
+		Array.prototype.move = function (old_index, new_index) {
+			if (new_index >= this.length) {
+				var k = new_index - this.length;
+				while ((k--) + 1) {
+					this.push(undefined);
+				}
+			}
+			this.splice(new_index, 0, this.splice(old_index, 1)[0]);
+			return this; // for testing purposes
+		};
+    </script>
+    {% if 'GOOGLE_ANALYTICS_PROPERTY_CODE' in config.SRES and config.SRES.GOOGLE_ANALYTICS_PROPERTY_CODE != '' %}
+        <script>
+            (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+            (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+            m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+            })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+            ga('create', '{{ config.SRES.GOOGLE_ANALYTICS_PROPERTY_CODE|safe }}', 'auto');
+            ga('send', 'pageview');
+        </script>
+    {% endif %}
+    {% block head_js1 %}{% endblock %}
+    {% block head_js2 %}{% endblock %}
+</head>
+<body class="sres-bootstrap-overrides">
+    {% block nav %}{% endblock %}
+    <div class="container-fluid sres-body">
+        {% block body %}{% endblock %}
+    </div>
+    {% block footer %}{% endblock %}
+</body>
+</html>

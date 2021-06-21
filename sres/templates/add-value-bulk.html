@@ -1,0 +1,107 @@
+{% extends 'base-add-value.html' %}
+
+{% block title %}
+    {{ column.config.name }}
+{% endblock %}
+
+{% block head_css2 %}
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.add-value-bulk.js') }}"></script>
+    {% raw %}
+        <script id="bulk_processing_result_template" type="text/x-handlebars-template">
+            <div data-sres-id="{{id}}" data-sres-identifier="{{identifier}}" class="sres-bulk-processing-result">
+                <span class="sres-bulk-processing-identifier text-monospace">{{identifier}}</span>
+                <span class="sres-bulk-processing-status">{{statusText}}</span>
+                <span class="sres-bulk-processing-success d-none"><span class="badge badge-success">OK</span></span>
+                <span class="sres-bulk-processing-error d-none"><span class="badge badge-danger">Error</span></span>
+                <span class="sres-bulk-processing-notify-email d-none"><span class="badge badge-info"><span class="fa fa-envelope"></span> Notification sent</span></span>
+                <span class="sres-bulk-processing-apply-to-others d-none"><span class="badge badge-info"><span class="fa fa-users"></span> Data applied to others</span></span>
+                <span class="sres-bulk-processing-messages"></span>
+                <span class="sres-bulk-processing-response"></span>
+            </div>
+        </script>
+    {% endraw %}
+{% endblock %}
+
+{% block body %}
+    
+    {% import 'add-value-modules.html' as add_value_modules %}
+    
+    <h3 class="mt-2">{{ column.config.name }}</h3>
+    <p>{{ column.config.description }}</p>
+        
+        
+    {# Backup available notification 
+    <div class="card mb-3 d-none" id="backup_available_notification_container">
+        <div class="card-header sres-add-value-container-header bg-warning" id="backup_available_notification_container_header" data-toggle="collapse" data-target="#backup_available_notification_container_collapse" aria-expanded="false" aria-controls="collapseOne">
+            <span class="fa fa-bolt"></span> Data backup exists
+        </div>
+        <div id="backup_available_notification_container_collapse" class="collapse show" aria-labelledby="backup_available_notification_container_header">
+            <div class="card-body">
+                <button type="button" class="sres-backup-available-view btn btn-warning"><span class="fa fa-play-circle" aria-hidden="true" aria-label="Review"></span> Review</button>
+                <button type="button" class="sres-backup-available-save btn btn-warning"><span class="fa fa-cloud-upload-alt" aria-hidden="true" aria-label="Save"></span> Save</button>
+                <button type="button" class="sres-backup-available-delete btn btn-warning"><span class="fa fa-trash" aria-hidden="true" aria-label="Delete"></span></button>
+            </div>
+        </div>
+    </div>
+    #}
+        
+    {# Display input field #}
+    <div class="card mb-3" id="set_data_container">
+        <div class="card-header sres-add-value-container-header" id="set_data_container_header" data-toggle="collapse" data-target="#set_data_container_collapse" aria-expanded="true" aria-controls="collapseOne">
+            <span class="fa fa-angle-right"></span> Set data
+        </div>
+        <div id="set_data_container_collapse" class="collapse show" aria-labelledby="set_data_container_header">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col">
+                        {% if column.config.type in ['submission', 'signinout', 'signinoutmemory'] %}
+                            <div id="set_data_current_timestamp" class="text-monospace"></div>
+                            <script>
+                                setTimeout(updateTimestamp, 500);
+                                $(document).ready(function(){
+                                    setDataToSend(null, $('#set_data_current_timestamp').text(), null, null, null);
+                                });
+                            </script>
+                        {% else %}
+                            {{ add_value_modules.add_value_module(table=table, column=column,
+                                student_identifier='', unique_string=vars.unique_string,
+                                callback_function_name='setDataToSend',
+                                auth_user=vars.auth_user, data_to_display='', 
+                                mode='single', readonly='', load_script=True, save_button_text='Set') }}
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {# identify student card #}
+    <div class="card mb-3 d-none" id="find_student_container">
+        <div class="card-header sres-add-value-container-header" id="find_student_container_header" data-toggle="collapse" data-target="#find_student_container_collapse" aria-expanded="true" aria-controls="collapseOne">
+            <span class="fa fa-search"></span> Enter individual identifiers
+        </div>
+        <div id="find_student_container_collapse" class="collapse show" aria-labelledby="find_student_container_header">
+            <div class="card-body">
+                <div>
+                    <label for="bulk_identifiers" class="sres-form-label">Scan or paste; one identifier per line</label>
+                    <textarea class="form-control" rows="5" id="bulk_identifiers"></textarea>
+                    <button type="button" class="btn btn-outline-primary mt-2" id="bulk_process_identifiers_now">Process identifiers</button>
+                </div>
+                <div class="mt-4">
+                    <label class="sres-form-label">Results</label>
+                    <a href="javascript:void(0);" id="bulk_process_identifiers_hide_all">Hide all</a>
+                    <a href="javascript:void(0);" id="bulk_process_identifiers_show_all">Show all</a>
+                    <div id="bulk_processing_results_container">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <br>
+    
+{% endblock %}

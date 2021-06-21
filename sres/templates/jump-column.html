@@ -1,0 +1,31 @@
+{% macro column_jumper(available_columns=[], base_edit_column_url='') %}
+
+{# 
+    available_columns (list of dicts from db.columns)
+#}
+
+<select name="column_jumper" id="column_jumper" class="form-control">
+    <option value=""></option>
+    {% for available_column in available_columns %}
+        <option value="{{ available_column.uuid }}">
+            {{ available_column.name }}{% if available_column.description %} ({{ available_column.description }}){% endif %}
+        </option>
+    {% endfor %}
+</select>
+
+<script>
+    $(document).ready(function(){
+        $("#column_jumper").chosen({
+            width: '100%',
+            search_contains: true,
+            placeholder_text_single: 'Jump to a column'
+        })
+    });
+    $(document).on('change', '#column_jumper', function(){
+        if ($('#column_jumper').val()) {
+            window.location = '{{ base_edit_column_url }}'.replace('__column_uuid__', $('#column_jumper').val());
+        }
+    });
+</script>
+
+{% endmacro %}

@@ -1,0 +1,177 @@
+{% macro select_user_fields(id, usernames=[], disable_inputs=false) %}
+    <div class="col">
+        <div class="row sres-select-user-container">
+            <div class="col-sm-3">
+                <button type="button" class="btn btn-sm btn-primary sres-select-user-add" {% if disable_inputs %}disabled{% endif %} data-sres-user-type="{{ id }}">
+                    <span class="fa fa-user-plus" aria-hidden="true"></span> Add {{ id }}
+                </button>
+                <button type="button" class="btn btn-sm btn-secondary sres-select-user-details hidden" title="List user details" {% if disable_inputs %}disabled{% endif %}><!-- TODO -->
+                    <span class="fa fa-info" aria-hidden="true"></span>
+                </button>
+                <!--cfif URL.action eq "edit">
+                    <cfset unikey_auth.inject_list_user_box(destination_id='authorised_#user_role['name']#s',users=users,user_role_name=user_role['name'])>
+                </cfif-->
+                <button type="button" class="btn btn-sm btn-secondary sres-select-user-bulk" title="Bulk edit" {% if disable_inputs %}disabled{% endif %}>
+                    <span class="fa fa-users" aria-hidden="true"></span>
+                </button>
+            </div>
+            <div class="col-sm-9">
+                <select name="authorised_{{ id }}s" id="authorised_{{ id }}s" class="sres-select-user-chosen" multiple {% if disable_inputs %}disabled{% endif %}>
+                    {% for username in usernames %}
+                        {% if username is mapping %}
+                            <option value="{{ username.value }}" selected>{{ username.display }} ({{ username.value }})</option>
+                        {% else %}
+                            <option value="{{ username }}" selected>{{ username }}</option>
+                        {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+{% endmacro %}
+
+{% macro find_user() %}
+    <div class="modal" tabindex="-1" role="dialog" id="select_user_find_user_modal">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add user</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-horizontal">
+                        <input type="text" id="select_user_find_user_term" placeholder="{{ _('Search for a person') }}" class="form-control" />
+                        <div class="d-none" id="select_user_find_user_spinner">
+                            <span class="fa fa-sync-alt spinning"></span>
+                        </div>
+                        <select id="select_user_find_user_select" class="form-control d-none">
+                        </select>
+                        <br>
+                        <button type="button" id="select_user_find_user_use" class="btn btn-primary d-none">
+                            {{ _('Use entered username') }}
+                        </button>
+                        <input type="hidden" id="select_user_target_element">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        $(document).on('click', 'button.sres-select-user-add', function(){
+            $('#select_user_find_user_select').addClass('d-none');
+            $('#select_user_find_user_spinner').addClass('d-none');
+            $('#select_user_find_user_use').addClass('d-none');
+            $('#select_user_find_user_modal').modal('show');
+            $('#select_user_find_user_term').val('').focus();
+            $('#select_user_target_element').val(
+                $(this).parents('.sres-select-user-container').find('.sres-select-user-chosen').attr('id')
+            );
+        });
+        $(document).on('keyup', '#select_user_find_user_term', function(e){
+            $('#select_user_find_user_use').attr('data-sres-username', $(this).val());
+            if (e.keyCode == 13) {
+                $('#select_user_find_user_use').trigger('click');
+                e.preventDefault();
+                return false;
+            }
+            $('#select_user_find_user_spinner').removeClass('d-none');
+            $('#select_user_find_user_use').removeClass('d-none');
+            if ($(this).val().length > 0) {
+                $('#select_user_find_user_use').removeAttr('disabled');
+            } else {
+                $('#select_user_find_user_use').attr('disabled', true);
+            }
+            if ($(this).val().length >= 4) {
+                if (typeof(jqxhrFindUser) != 'undefined') {
+                    //console.log('aborting jqxhr');
+                    jqxhrFindUser.abort();
+                }
+                jqxhrFindUser = $.ajax({
+                    url: "{{ url_for('user.search_users') }}?term=" + $('#select_user_find_user_term').val(),
+                    type:'GET',
+                    dataType:'json'
+                }).done(function(data){
+                    console.log(data);
+                    if (data.results && data.results.length >= 1) {
+                        $('#select_user_find_user_spinner').addClass('d-none');
+                        $('#select_user_find_user_select')
+                            .html('<option value="">Select a person</option>')
+                            .removeClass('d-none');
+                        for (i = 0; i < data.results.length; i++) {
+                            if (data.results[i].value != '') {
+                                $('#select_user_find_user_select').append('<option value=' + data.results[i].value + '>' + data.results[i].display + '</option>')
+                            }
+                        }
+                    } else {
+                        $('#select_user_find_user_select').addClass('d-none');
+                    }
+                });
+            } else {
+                $('#select_user_find_user_select').addClass('d-none');
+            }
+        });
+        $(document).on('change', '#select_user_find_user_select', function(){
+            $('#select_user_find_user_use')
+                .attr('data-sres-username', $(this).val())
+                .trigger('click');
+        });
+        $('#select_user_find_user_use').on('click', function(){
+            $('#select_user_find_user_modal').modal('hide');
+            if ($(this).attr('data-sres-username').length > 0) {
+                $('#' + $('#select_user_target_element').val())
+                    .append('<option value="' + $(this).attr('data-sres-username') + '" selected>' + $(this).attr('data-sres-username') + '</option>')
+                    .trigger('chosen:updated');
+            }
+        });
+    </script>
+{% endmacro %}
+
+{% macro bulk_edit_users() %}
+    <div class="modal fade" id="select_user_bulk_edit_modal" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Bulk edit</h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <label for="bulk_edit_authorised_users_list">One username per line</label>
+                    <textarea class="form-control" id="bulk_edit_authorised_users_list" rows="10"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="modal_bulk_edit_authorised_users_confirm">Confirm</button>
+                    <input type="hidden" id="select_user_bulk_edit_target_element">
+                </div>
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+    <script>
+        $(document).on('click', '.sres-select-user-bulk', function(){
+            $('#select_user_bulk_edit_target_element').val(
+                $(this).parents('.sres-select-user-container').find('.sres-select-user-chosen').attr('id')
+            );
+            var $targetElement = $('#' + $('#select_user_bulk_edit_target_element').val());
+            if ($targetElement.val()) {
+                $('#bulk_edit_authorised_users_list').val($targetElement.val().join('\n'));
+            } else {
+                $('#bulk_edit_authorised_users_list').val('');
+            }
+            $("#select_user_bulk_edit_modal").modal('show');
+        });
+        $(document).on('click', '#modal_bulk_edit_authorised_users_confirm', function(event) {
+            var $targetElement = $('#' + $('#select_user_bulk_edit_target_element').val());
+            //console.log($("##authorised_" + source + "s"));
+            $targetElement.html('');
+            $("#bulk_edit_authorised_users_list").val().split('\n').forEach(function(username){
+                if (username != '') {
+                    $targetElement.append('<option value="' + username + '" selected>' + username + '</option>');
+                }
+            });
+            $targetElement.trigger('chosen:updated');
+            $("#select_user_bulk_edit_modal").modal('hide');
+        });
+    </script>
+{% endmacro %}

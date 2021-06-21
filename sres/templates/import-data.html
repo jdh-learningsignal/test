@@ -1,0 +1,282 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+    Import data into {{ table.config.code }}
+{% endblock %}
+
+{% block head_css2 %}
+    
+{% endblock %}
+
+{% block head_js2 %}
+    <script>
+        ENV['FILE_IMPORT_ENDPOINT'] = "{{ url_for('table.import_data_preprocess_file', table_uuid=table.config.uuid, source='__source__', stage='__stage__') }}";
+    </script>
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ajaxq.js') }}"></script>
+    {% raw %}
+        <script id="import-row-mapper-template" type="text/x-handlebars-template">
+            <tr data-sres-header-index="{{c}}">
+                <td>
+                    {{column_header}}
+                    <a href="javascript:void(0);" class="sres-import-data-preview" title="Preview data"><span class="fa fa-eye"></span></a>
+                    <div class="alert alert-info sres-column-data-preview collapse" id="import_data_preview_{{c}}">
+                        {{#each column_preview}}
+                            <pre>{{this}}</pre>
+                        {{/each}}
+                    <div>
+                </td>
+                <td class="form-inline">
+                    <span class="btn-group btn-group-toggle" data-toggle="buttons">
+                        <label class="btn btn-outline-secondary active" title="Do not import" data-tippy-content="Do not import this">
+                            <input type="radio" name="column_import_action_{{c}}" value="noimport" class="sres-import-action-choose" checked><span class="fa fa-ban"></span>
+                        </label>
+                        <label class="btn btn-outline-success" title="New column" data-tippy-content="Create a new column in the list, and then import data from the file into that">
+                            <input type="radio" name="column_import_action_{{c}}" value="new" class="sres-import-action-choose"><span class="fa fa-plus"></span>&nbsp;New
+                        </label>
+                        <label class="btn btn-outline-primary {{#if disableExisting}}disabled{{/if}}" title="Existing column" 
+                                {{#if disableExisting}}
+                                    data-tippy-content="There are no existing columns in the list"
+                                    style="pointer-events: none;"
+                                {{else}}
+                                    data-tippy-content="Import data from the file into a column that already exists in the list"
+                                {{/if}}
+                                >
+                            <input type="radio" name="column_import_action_{{c}}" value="existing" class="sres-import-action-choose" {{disableExisting}}><span class="fa fa-arrow-alt-circle-down"></span>&nbsp;Existing
+                        </label>
+                    </span>
+                    <span class="sres-import-destination-config sres-import-destination-select">
+                        <select name="column_destination_{{c}}" id="column_destination_{{c}}" data-columnname="{{column_header}}" class="form-control d-none sres-import-destination-config sres-import-destination-select ml-2">
+                            {{#each destination_columns}}
+                                <option value="{{this.uuid}}" data-sres-datatype="{{this.type}}" {{#if this.selected}}selected{{/if}}>
+                                    {{this.name}}
+                                </option>
+                            {{/each}}
+                            {{#each system_columns}}
+                                <option value="{{this.name}}" data-sres-datatype="__system__" {{#if this.selected}}selected{{/if}}>
+                                    [SYSTEM COLUMN] {{this.display}}
+                                </option>
+                            {{/each}}
+                        </select>
+                        <span class="d-none sres-datatype-alert-multientry text-danger ml-2" title="The selected column is a multientry column. Importing into a multientry column is not recommended because a very specific data format is expected. Improper data format may break filters and other functions. It is recommended you import data into a new column instead.">
+                            <span class="fa fa-exclamation-triangle"></span>
+                            Column type warning
+                        </span>
+                    </span>
+                    <input type="text" placeholder="Alternative name of new column" data-tippy-content="Optional: enter an alternative name to call this column. It will be called <em>{{column_header}}</em> by default."
+                        name="column_new_column_name_{{c}}" id="column_new_column_name_{{c}}" 
+                        class="form-control d-none sres-import-destination-config sres-import-destination-name w-50 ml-2">
+                </td>
+            </tr>
+        </script>
+    {% endraw %}
+    <script src="{{ url_for('static', filename='js/sres.import-data.js', rand=range(1000,9999)|random|string) }}"></script>
+{% endblock %}
+
+{% block body %}
+    
+    <div class="row">
+        <div class="col">
+            <h2>Import data into {{ table.get_full_name() }}</h2>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col">
+            {% if vars['method'] != 'POST' %}
+            <form id="import_file_preprocess" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Import type</label>
+                    <div class="col-sm-10">
+                        <select name="input_file_type" id="input_file_type" class="form-control">
+                            <option value="">Select an option</option>
+                            <option value="generic_spreadsheet">Spreadsheet (CSV, TAB, TXT, XLSX, XLS, etc)</option>
+                            <option value="scantron_auto_5_2_multi">Scantron 5.2 multi</option>
+                            <option value="scantron_auto_4_5_multi">Scantron 4.5 multi</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group sres-import-options collapse row">
+                    <label class="col-sm-2 col-form-label sres-form-label">
+                        Import options
+                        <a href=".sres-import-options-container" data-toggle="collapse" aria-expanded="false">
+                            <span class="fa fa-angle-down sres-collapse-caret"></span>
+                        </a>
+                    </label>
+                    <div class="col-sm-10 collapse show sres-import-options-container">
+                        <div id="generic_spreadsheet_options" class="one-sres-import-option collapse">
+                            <div class="alert alert-info hidden" id="import_helper_generic_spreadsheet">
+                                Upload a file that contains the data you wish to import. 
+                                At least one column must have a student identifier {{ _('(such as SID, email, unikey)') }}. Data should be contained in other columns.
+                                Once the file is uploaded, you will be asked to select which column(s) to pull data from.
+                            </div>
+                            <input type="file" id="generic_spreadsheet_file">
+                        </div>
+                        <div id="scantron_auto_4_5_multi_options" class="one-sres-import-option collapse">
+                            <div class="alert alert-info hidden" id="import_helper_scantron_auto_4_5_multi">
+                                    This is still an experimental feature.  It attempts to bring in the Scantron 4.5 file.
+				    <br /><br />
+				    An Excel file is needed: the one generated when scanning in Scantron tests.
+				    <ol>
+				      <li>The sheet with student data in it is the first sheet in this spreadsheet.</li>
+				      <li>The header row (containing q1 q2 etc) is row number 1</li>
+				      <li>The answer key is labelled KEY and is row number 2</li>
+				      <li>There is a column called Grade</li>
+				      <li>There is a column called Percent Score</li>
+				      <li>There is a column called Total Score</li>
+				   </ol>
+                            </div>
+                            <label for="prefix" class="col-sm-2 control-label">Column name prefix:</label>
+                            <input type="text" name="scantron_auto_4_5_multi_prefix" id="prefix" class="form-control"><br>
+
+                            <label for="scantron_auto_4_5_multi_file" class="col-sm-2 control-label">Scantron spreadsheet:</label><br>
+                            <input type="file" name="scantron_auto_4_5_multi_file" id="scantron_auto_4_5_multi_file"><br><br>
+
+                            <label for="just_check_students_4_5">Just check students (don't actually import)</label>
+                            <input type="checkbox" id="just_check_students_4_5" name="just_check_students">
+                        </div>
+                        <div id="scantron_auto_5_2_multi_options" class="one-sres-import-option collapse">
+                            <div class="alert alert-info hidden" id="import_helper_scantron_auto_5_2_multi">
+                                        This is still an experimental feature.	It attempts to bring in the Scantron 5.2 file.
+					<br /><br />
+					An Excel file is needed: the one generated when scanning in Scantron tests.
+					It is assumed that
+                                        <ol>
+                                          <li>There is a sheet called "Student Response Report"</li>
+                                          <li>The header row (containing Q1 Q2 etc) is row number 6</li>
+                                          <li>The Answer key is labelled "Answer key" and is row number 7</li>
+                                          <li>There is a column called Total</li>
+                                          <li>There is a column called Percent</li>
+                                          <li>There is a column called Grade</li>
+                                        </ol>
+                            </div>
+                            <label for="prefix" class="col-sm-2 control-label">Column name prefix:</label>
+                            <input type="text" name="scantron_auto_5_2_multi_prefix" id="prefix" class="form-control"><br>
+
+                            <label for="scantron_auto_5_2_multi_file" class="col-sm-2 control-label">Scantron spreadsheet:</label><br>
+                            <input type="file" name="scantron_auto_5_2_multi_file" id="scantron_auto_5_2_multi_file"><br><br>
+
+                            <label for="just_check_students_5_2">Just check students (don't actually import)</label>
+                            <input type="checkbox" id="just_check_students_5_2" name="just_check_students">
+
+                        </div>
+                        <div class="mt-3">
+                            <button class="btn btn-primary" id="import_file_preprocess_button">
+                                Process
+                                <span class="d-none fa fa-sync-alt spinning sres-spinner"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+            {% endif %}
+            {% if vars['method'] == 'POST' %}
+              <div class="alert alert-success">
+                {% if vars['just_check_students'] %}
+                  <p>Successfully checked students BUT DATA NOT IMPORTED</p>
+                {% else %}
+                  <p>Successfully uploaded Scantron {{ vars['scantron_version'] }} spreadsheet</p>
+                {% endif %}
+              </div>
+              {% if vars['students_not_enrolled'] %}
+                <div class="alert alert-danger">
+                  <p>The following student IDs were listed in the Scantron spreadsheet, but are not enrolled in this class:</p>
+                  {% for studentid in vars['students_not_enrolled'] %}
+                    {{ studentid }}<br>
+                  {% endfor %}
+                </div>
+              {% endif %}
+              {% if vars['students_who_did_NOT_take_test'] %}
+                <div class="alert alert-info">
+                  <p>The following student IDs are students who are enrolled, but did not take this test:</p>
+                  {% for studentid in vars['students_who_did_NOT_take_test'] %}
+                    {{ studentid }}<br>
+                  {% endfor %}
+                </div>
+              {% endif %}
+              {% if vars['just_check_students'] %}
+                <p>
+                  Would you like to <a class="btn btn-primary" href="{{ url_for('table.import_data', table_uuid=vars.table_uuid) }}">Go back to the import data page</a> 
+                  or <a class="btn btn-primary" href="{{ url_for('table.view_table', table_uuid=vars.table_uuid) }}">View list</a>
+                </p>
+              {% endif %}
+              <a class="button" href="{{ url_for('table.view_table', table_uuid=vars.table_uuid) }}">View list</a>
+            {% endif %}
+            <form id="import_file_mapper">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="form-group row sres-import-mapper collapse">
+                    <label class="col-sm-2 col-form-label sres-form-label">
+                        Map columns
+                        <a href=".sres-import-mapper-container" data-toggle="collapse" aria-expanded="true">
+                            <span class="fa fa-angle-down sres-collapse-caret"></span>
+                        </a>
+                    </label>
+                    <div class="col-sm-10 sres-import-mapper-container collapse show">
+                        <div class="form-group alert alert-danger" id="column_sid_container">
+                            <div id="column_sid_unmapped_warning" class="mb-2">
+                                <span class="fa fa-exclamation-triangle"></span>
+                                Please choose an option
+                            </div>
+                            <label for="column_sid" class="sres-form-label">
+                                <span class="d-none" id="column_sid_mapped"><span class="fa fa-check-circle" aria-label="Identifier column has been selected."></span></span>
+                                Unique identifier is in column:
+                            </label>
+                            <select id="column_sid" name="column_sid" class="form-control">
+                            </select>
+                        </div>
+                        <div>
+                            <label class="sres-form-label">Map columns:</label>
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>
+                                            Input file column header
+                                        </th>
+                                        <th>
+                                            Destination column
+                                            <input type="button" value="Set all to: do not import" class="btn btn-outline-secondary btn-sm sres-import-action-choose-all-noimport">
+                                            <input type="button" value="Set all to: new column" class="btn btn-outline-success btn-sm sres-import-action-choose-all-new">
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody id="import_mapper_mapping_container">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </form>
+            <div class="form-group row sres-import-activator collapse">
+                <label class="col-sm-2 col-form-label sres-form-label">
+                    Import
+                    <a href=".sres-import-activator-container" data-toggle="collapse" aria-expanded="true">
+                        <span class="fa fa-angle-down sres-collapse-caret"></span>
+                    </a>
+                </label>
+                <div class="col-sm-10 sres-import-activator-container collapse show">
+                    <button type="button" class="btn btn-primary" id="import_activate">Import</button>
+                </div>
+            </div>
+            <div class="form-group row sres-import-status collapse">
+                <label class="col-sm-2 col-form-label sres-form-label">Import status</label>
+                <div class="col-sm-10 sres-import-status-container">
+                    <div class="progress-spinner collapse show">
+                        <span class="fa fa-sync-alt spinning"></span>
+                        Please wait
+                    </div>
+                    <div class="progress mt-3 mb-3">
+                        <div class="progress-bar bg-success" role="progressbar" data-sres-valuenow="0" data-sres-valuemax="0" style="width: 0%" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100"></div>
+                        <div class="progress-bar bg-danger" role="progressbar" data-sres-valuenow="0" data-sres-valuemax="0" style="width: 0%" aria-valuenow="30" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <div class="sres-import-final collapse mb-3">
+                        <div class="sres-import-final-container">
+                            <a href="{{ url_for('table.view_table', table_uuid=table.config.uuid) }}" class="btn btn-success">View list</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+{% endblock %}

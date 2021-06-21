@@ -1,0 +1,379 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+    Run filter - {{ filter.config.name }}
+{% endblock %}
+
+{% block head_css2 %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dataTables.bootstrap4.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/buttons.bootstrap4.min.css') }}">
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/jquery-ui.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jquery.dataTables.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dataTables.bootstrap4.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dataTables.buttons.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/buttons.bootstrap4.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/buttons.html5.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jszip.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ajaxq.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.filter-shared.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.filter-run.js') }}"></script>
+    <script>
+        ENV['RUN_PERSONALISED_MESSAGE_ENDPOINT'] = "{{ url_for('filter.run_filter_message', filter_uuid=filter.config.uuid, mode='__mode__')|safe }}";
+        ENV['ADD_RUN_HISTORY_ENDPOINT'] = "{{ url_for('filter.add_run_history', filter_uuid=filter.config.uuid) }}";
+        ENV['filter_uuid'] = '{{ filter.config.uuid }}';
+        ENV['contact_type'] = {{ vars.contact_type|tojson }};
+    </script>
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col">
+            <h2>Preview and run filter {{ filter.config.name }}</h2>
+        </div>
+    </div>
+    
+    {% if filter.config.run_history %}
+        <div class="row">
+            <div class="col">
+                <div class="alert alert-danger">
+                    <span class="fa fa-lock"></span>
+                    This filter has been locked because it has been run already.
+                </div>
+            </div>
+        </div>
+    {% endif %}
+    
+    {% if filter.config.contact_type|length == 0 %}
+        <div class="row">
+            <div class="col">
+                <div class="alert alert-warning">
+                    No contact methods have been configured for this filter.
+                </div>
+            </div>
+        </div>
+    {% endif %}
+    
+    <div class="row">
+        <div class="col">
+            <div class="alert alert-{% if results|length %}info{% else %}warning{% endif %}">
+                <span class="fa fa-filter"></span>
+                <strong>{{ results|length }} students identified.</strong>
+                {% if results|length %}
+                    <a href="#results_table" data-toggle="collapse">
+                        See table with more information <span class="fa fa-angle-down"></span>
+                    </a>
+                {% else %}
+                    <div class="mt-2">
+                        Please double-check the primary condition(s) for this filter and ensure they correspond with the data that is being analysed.
+                        For example, are the conditions trying to compare text against numerical values?
+                        Or, are particular conditions mutually exclusive, or have the operators (e.g. equals, less than, contains, etc) been set incorrectly?
+                    </div>
+                    <div class="mt-2 mb-2">
+                        <a href="{{ url_for('filter.edit_filter', filter_uuid=filter.config.uuid, uih=request.args.get('uih')) }}" class="btn btn-primary" role="button">
+                            <span class="fa fa-pen"></span> Go back and edit this filter
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+            <div id="results_table" class="collapse mb-4">
+                <h3>Data table</h3>
+                <div>
+                    It's useful to check this table to:
+                    <ul>
+                        <li>make sure this filter's primary conditions are processing correctly and selecting the right students, and</li>
+                        <li>see how often each student has been contacted recently.</li>
+                    </ul>
+                </div>
+                <table id="results_dump" class="table table-striped table-condensed">
+                    <thead>
+                        <tr>
+                            {% if not filter.config.run_history %}
+                                <th><span class="fa fa-envelope" aria-hidden="true"></span></th>
+                            {% endif %}
+                            {% for k, v in headers.items() if not v.hide_from_table %}
+                                <th class="sres-results-dump-column-{{ v.class }}">{{ v.display }}</th>
+                            {% endfor %}
+                            <th>
+                                Already contacted
+                                <span class="badge badge-danger">7 d</span>
+                                <span class="badge badge-warning">14 d</span>
+                                <span class="badge badge-info">31 d</span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for result_k, result in results.items() %}
+                            <tr>
+                                {% if not filter.config.run_history %}
+                                    <td><input type="checkbox" name="confirm_send_to" value="{{ result.sid }}" checked data-sres-identifier="{{ result.sid }}"></td>
+                                {% endif %}
+                                {% for k, v in headers.items() if not v.hide_from_table %}
+                                    <td>{{ result[k] }}</td>
+                                {% endfor %}
+                                <td>
+                                    <span class="badge badge-danger">
+                                        {{ vars.already_sent_7[result['email']] }}
+                                    </span>
+                                    <span class="badge badge-warning">
+                                        {{ vars.already_sent_14[result['email']] }}
+                                    </span>
+                                    <span class="badge badge-info">
+                                        {{ vars.already_sent_31[result['email']] }}
+                                    </span>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    {% if vars.results_warnings.missing_email_count %}
+        <div class="row">
+            <div class="col">
+                <div class="alert alert-danger">
+                    <span class="fa fa-exclamation-triangle"></span>
+                    {{ vars.results_warnings.missing_email_count }} recipients are missing email addresses. This filter will not send properly. Please address the situation.
+                </div>
+            </div>
+        </div>
+    {% endif %}
+    
+    {% if filter.config.contact_type|length and results|length %}
+    <div class="row mb-3">
+        <div class="col">
+            <h3>
+                Preview messages
+                <a href="#message_preview_container" data-toggle="collapse"><span class="fa fa-angle-down"></span></a>
+            </h3>
+            <div id="message_preview_container" class="collapse show">
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Select a student</label>
+                    <div class="col-sm-9">
+                        <select id="preview_selector" class="form-control">
+                            {% for result_k, result in results.items() %}
+                                <option value="{{ result_k }}" data-sres-sid="{{ result.sid }}">{{ result.preferred_name }} {{ result.surname }} {{ result.display_sid }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-sm-1 text-right">
+                        <button type="button" class="btn btn-sm btn-light" aria-label="Previous student" id="preview_prev"><span class="fa fa-chevron-left"></span></button>
+                        <button type="button" class="btn btn-sm btn-light" aria-label="Next student" id="preview_next"><span class="fa fa-chevron-right"></span></button>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-sm-2">
+                        <label class="col-form-label sres-form-label">Preview</label>
+                        <span id="preview_email_loading" class="collapse">
+                            <span class="fa fa-circle-notch spinning"></span>
+                        </span>
+                    </div>
+                    <div class="col-sm-10">
+                        <!--- placeholder for unchecked warning --->
+                        <div class="alert alert-warning d-none" id="preview_email_ignoring_send_to">
+                            <span class="fa fa-ban" aria-hidden="true"></span>
+                            Student has been deselected above. This message will <strong>not</strong> be sent to this student.
+                        </div>
+                        <!--- display --->
+                        <div id="preview_email_container" class="d-none">
+                            <table class="table">
+                                <tr>
+                                    <td><strong>From</strong></td>
+                                    <td id="preview_email_from"></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>To</strong></td>
+                                    <td id="preview_email_to"></td>
+                                </tr>
+                                <tr class="d-none">
+                                    <td><strong>Reply to</strong></td>
+                                    <td  id="preview_email_reply_to"></td>
+                                </tr>
+                                <tr class="d-none">
+                                    <td><strong>CC</strong></td>
+                                    <td  id="preview_email_cc"></td>
+                                </tr>
+                                <tr class="d-none">
+                                    <td><strong>BCC</strong></td>
+                                    <td id="preview_email_bcc"></td>
+                                </tr>
+                                <tr class="d-none">
+                                    <td><strong>Attachments</strong></td>
+                                    <td id="preview_email_attachments"></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Subject</strong></td>
+                                    <td id="preview_email_subject"></td>
+                                </tr>
+                                <tr>
+                                    <td style="vertical-align:top;"><strong>Message</strong></td>
+                                    <td id="preview_email_body"></td>
+                                </tr>
+                                <tr>
+                                    <td style="vertical-align:top;"><strong>Message (plain text)</strong></td>
+                                    <td id="preview_email_body_plaintext"></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Actions</label>
+                    <div class="col-sm-10">
+                        {% if not filter.config.run_history and results|length %}
+                            <button type="button" id="send_message_button" class="btn btn-primary">
+                                <span class="fa fa-paper-plane"></span> Send messages now
+                            </button>
+                            <button type="button" id="schedule_message_button" class="btn btn-outline-primary">
+                                <span class="fa fa-clock"></span> Schedule filter to be run later
+                            </button>
+                        {% endif %}
+                        <a href="{{ url_for('filter.edit_filter', filter_uuid=filter.config.uuid, uih=request.args.get('uih')) }}" class="btn btn-outline-primary" role="button">
+                            <span class="fa fa-pen"></span> Edit filter
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row mb-3 d-none" id="message_send_parent_container">
+        <div class="col">
+            <h3>
+                Send messages
+                <a href="#message_send_container" data-toggle="collapse"><span class="fa fa-angle-down"></span></a>
+            </h3>
+            <div id="message_send_container" class="collapse show">
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Send log</label>
+                    <div class="col-sm-10" id="message_send_log_container">
+                        <div class="alert alert-info d-none mt-2" id="message_send_log_queued">
+                            Message sending has been requested with the server. You can now close this browser tab; message sending will proceed in the background. 
+                            Sending should take around ~<span id="message_send_log_time_estimate">10</span> minutes.
+                            Once complete, you can <a href="{{ url_for('filter.view_logs', filter_uuid=filter.config.uuid) }}">view the send logs</a>;
+                            a notification will also be sent to <span id="message_send_log_email_notification">the sender</span>.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!--- progress modal --->
+    <div class="modal fade" tabindex="-1" role="dialog" id="sending_status_modal">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Sending messages</h4>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div id="sending_status_container_email" class="d-none">
+                        <label>Emails</label>
+                        <div class="progress">
+                            <div class="progress-bar" role="progressbar" id="sending_status_progressbar" style="width: 0%;">
+                            </div>
+                        </div>
+                        <div id="send_complete" style="display:none;">Finished!</div>	
+                    </div>
+                    <br>
+                    <div id="sending_status_container_sms" class="d-none">
+                        <label>SMS</label>
+                        <div class="progress">
+                            <div class="progress-bar" role="progressbar" id="sending_status_progressbar_sms" style="width: 0%;">
+                            </div>
+                        </div>	
+                        <div id="send_complete_sms" class="d-none">Finished!</div>	
+                    </div>	
+                </div>
+            </div><!-- /.modal-content -->
+        </div><!-- /.modal-dialog -->
+    </div><!-- /.modal -->
+    
+    <!--- send message confirmation modal --->
+    <div class="modal fade" id="modal_send_message_confirmation" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Proceed with message send?</h4>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you wish to send messages to <span id="modal_send_message_confirmation_recipient_count" style="font-size:x-large;"></span> recipients?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-primary" data-dismiss="modal"><span class="fa fa-running" aria-hidden="true"></span> Back to safety</button>
+                    <button type="button" class="btn btn-primary" id="modal_send_message_confirmation_send"><span class="fa fa-check" aria-hidden="true"></span> Send messages now</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!--- schedule message modal --->
+    <div class="modal fade" id="modal_schedule_message" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Schedule filter send</h4>
+                </div>
+                <div class="modal-body">
+                    <p>
+                        Set a date and time when you would like this filter to be run and sent.
+                        You can only set a schedule up to 72 hours in advance.
+                    </p>
+                    <p>
+                        <strong>Note</strong> that when this filter runs at the specified scheduled time, it may pick up a different set of students based on the data available live at the time.
+                        <span id="modal_schedule_message_ignorelist_notice" class="d-none">
+                            <strong>However</strong>, the <span id="modal_schedule_message_ignorelist_count"></span> students who have been unselected will still <em>not</em> receive this filter.
+                        </span>
+                    </p>
+                    <div class="form-group">
+                        <label for="modal_schedule_message_date">Date</label>
+                        <input type="date" class="form-control" id="modal_schedule_message_date" value="" min="" max="">
+                    </div>
+                    <div class="form-group">
+                        <label for="modal_schedule_message_date">Time</label>
+                        <input type="time" class="form-control" id="modal_schedule_message_time">
+                    </div>
+                    <div class="form-group">
+                        <label for="modal_schedule_message_reminder">Remind me</label>
+                        <select class="form-control" id="modal_schedule_message_reminder">
+                            <option value="no">(No reminder)</option>
+                            {% for h in [1, 2, 4, 8, 12, 24, 36, 48] %}
+                                <option value="{{ h }}">{{ h }} hours before sending</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="alert alert-danger d-none" id="modal_schedule_message_error">
+                    </div>
+                    <div class="alert alert-success d-none" id="modal_schedule_message_success">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-primary" data-dismiss="modal"><span class="fa fa-running" aria-hidden="true"></span> Back to safety</button>
+                    <button type="button" class="btn btn-primary" id="modal_schedule_message_do"><span class="fa fa-clock" aria-hidden="true"></span> Set this schedule</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+{% endblock %}

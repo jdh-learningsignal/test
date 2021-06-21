@@ -1,0 +1,131 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+    Tags
+{% endblock %}
+
+{% block body %}
+
+  {% include 'flash_messages.html' %}
+
+  <div class="row">
+    <div class="col">
+      <h1>Tags</h1>
+    </div>
+  </div>
+
+
+{% if vars.user_can_create_tags %}
+    <div class="row">
+        <div class="col">
+            <div class="card-deck">
+            
+                <div class="card bg-light">
+                    <div class="card-header">
+                        Add new tag
+                    </div>
+                    <div class="card-body">
+                        <form method="post" action="{{ url_for('tags.tags') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="tag">
+                            <div class="form-group row">
+                                <label class="col-sm-2 col-form-label sres-form-label">Tag Name</label>
+                                <div class="col-sm-7">
+                                    <input name="name" class="form-control">
+                                </div>
+                                <div class="col-sm-2">
+                                    <button class="btn btn-primary">Add</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            
+                <div class="card bg-light">
+                    <div class="card-header">Add new tag group</div>
+                    <div class="card-body">
+                        <form method="post" action="{{ url_for('tags.tags') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <input type="hidden" name="action" value="taggroup">
+                            <div class="form-group row">
+                                <label class="col-sm-2 col-form-label sres-form-label">Tag Group Name</label>
+                                <div class="col-sm-7">
+                                    <input name="name" class="form-control">
+                                </div>
+                                <div class="col-sm-3">
+                                    <button class="btn btn-primary">Add</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            
+            </div>
+        </div>
+    </div>
+{% endif %}
+
+<br><br>
+
+<div class="row">
+  <div class="col">
+    <div class="card-deck">
+
+        <div class="card bg-light">
+        <div class="card-header">Existing tags</div>
+        <div class="card-body">
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th>Tag</th>
+                <th>Tag group</th>
+                <th>Number of columns which use this tag</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {% for tag in tags %}
+               <tr>
+                  <td><a href="{{ url_for('tags.view_tag', tag_uuid=tag.uuid) }}">{{ tag.name }}</a></td>
+                  <td>
+                    {% if tag.uuid in vars['group'] %}
+                      <a href="{{ url_for('tag_groups.view_tag_group', tag_group_uuid=vars['group'][tag.uuid]['uuid']) }}">{{ vars['group'][tag.uuid]['name'] }}</a>
+                    {% endif %}
+                  </td>
+                  <td>{{ vars['num_columns'][tag.name] }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+
+        </div>
+      </div>
+
+      <div class="card bg-light">
+        <div class="card-header">Existing tag groups</div>
+        <div class="card-body">
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th>Tag group</th>
+                <th>Number of tags in this group</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tag_group in tag_groups %}
+                <tr>
+                  <td><a href="{{ url_for('tag_groups.view_tag_group', tag_group_uuid=tag_group.uuid) }}">{{ tag_group.name }}</a></td>
+                  <td>{{ tag_group.number_of_tags_in_this_group }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+   
+
+{% endblock %}

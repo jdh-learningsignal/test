@@ -1,0 +1,139 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+    View scheduled jobs
+{% endblock %}
+
+{% block head_css2 %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/dataTables.bootstrap4.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/buttons.bootstrap4.min.css') }}">
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/jquery-ui.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jquery.dataTables.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dataTables.bootstrap4.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/dataTables.buttons.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/buttons.bootstrap4.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/buttons.html5.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jszip.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/ajaxq.js') }}"></script>
+    <script>
+        ENV['RUN_JOB_ENDPOINT'] = "{{ url_for('admin.run_scheduled_job', id='__job_id__')|safe }}";
+        ENV['RESCHEDULE_JOB_ENDPOINT'] = "{{ url_for('admin.reschedule_scheduled_job', id='__job_id__', trigger='interval', minutes=240)|safe }}";
+        ENV['DELETE_JOB_ENDPOINT'] = "{{ url_for('admin.delete_scheduled_job', id='__job_id__')|safe }}";
+    </script>
+    <script>
+        $(document).ready(function(){
+            oTable = $(jobs_dump).DataTable({
+                dom: "<'row'<'col'l><'col'f>><'row'<'col'i><'col'p>><'row'<'col'tr>><'row'<'col'B>>",
+                buttons: [{
+                    extend: 'csvHtml5',
+                    text: 'Download as CSV'
+                }],
+                order: [[ 0, 'asc' ]]
+            });
+        });
+        $(document).on('click', 'a.sres-job-action', function(){
+            let jobId = $(this).parents('[data-sres-job-id]').attr('data-sres-job-id');
+            let url = '';
+            if ($(this).hasClass('sres-job-run')) {
+                url = ENV['RUN_JOB_ENDPOINT'].replace('__job_id__', jobId);
+            } else if ($(this).hasClass('sres-job-reschedule')) {
+                url = ENV['RESCHEDULE_JOB_ENDPOINT'].replace('__job_id__', jobId);
+            } else if ($(this).hasClass('sres-job-delete')) {
+                url = ENV['DELETE_JOB_ENDPOINT'].replace('__job_id__', jobId);
+            }
+            $.notify(
+                {message: 'Requesting...'},
+                {type: 'info'}
+            );
+            // post
+            $.ajax({
+                url: url,
+                method: 'POST',
+                statusCode: {
+                    200: function(data) {
+                        $.notify(
+                            {message: 'OK'},
+                            {type: 'success'}
+                        );
+                    },
+                    403: function(data) {
+                        $.notify(
+                            {message: 'Unauthorised'},
+                            {type: 'danger'}
+                        );
+                    },
+                    404: function(data) {
+                        $.notify(
+                            {message: 'Not found'},
+                            {type: 'danger'}
+                        );
+                    }
+                }
+            });
+        });
+    </script>
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col">
+            <h2>View scheduled jobs</h2>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="col">
+            <h3>Scheduled jobs</h3>
+            <table id="jobs_dump" class="table table-striped table-condensed">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Args</th>
+                        <th>User</th>
+                        <th>Kwargs</th>
+                        <th>Next run time</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for job in jobs %}
+                        <tr data-sres-job-id="{{ job.id }}">
+                            <td>{{ job.id_display|safe }}</td>
+                            <td>{{ job.name }}</td>
+                            <td>{{ job.args }}</td>
+                            <td>{{ job.user }}</td>
+                            <td>{{ job.kwargs }}</td>
+                            <td>{{ job.next_run_time }}</td>
+                            <td>
+                                <a href="javascript:void(0);" title="Run job" class="sres-job-action sres-job-run"><span class="fa fa-running"></span></a>
+                                <a href="javascript:void(0);" title="Reschedule job" class="sres-job-action sres-job-reschedule"><span class="fa fa-calendar-plus"></span></a>
+                                <a href="javascript:void(0);" title="Delete job" class="sres-job-action sres-job-delete"><span class="fa fa-trash"></span></a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+{% endblock %}

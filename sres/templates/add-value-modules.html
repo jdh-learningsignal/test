@@ -1,0 +1,1223 @@
+{% macro add_value_module(
+    table,
+    column,
+    student_identifier,
+    unique_string,
+    auth_user,
+    data_to_display='', 
+    mode='single',
+    entry_mode='single',
+    show_simple_editor_override=false,
+    readonly='',
+    callback_function_name='',
+    load_script_only=False,
+    load_script=False,
+    additional_class='sres-addvalue-module-element',
+    save_button_text='Save',
+    do_not_trigger=False,
+    multiple_reports_meta={},
+    user_is_staff=False
+) %}
+
+    {# 
+        Renders input fields for add-value*.html
+        
+        table (Table)
+        column (Column)
+        student_identifier (string) Identifier, usually sid
+        unique_string (string) e.g. uuid; only A-Z0-9a-z_
+        auth_user (string) from get_auth_user()
+        
+        data_to_display (any) Existing data
+        
+        mode (string) Data entry mode e.g. single, bulk, roll, etc.
+        entry_mode (string) The data entry mode of the host page e.g. single|bulk|roll
+        show_simple_editor_override (boolean) True to show simple textbox with save button
+        readonly (string) Set to 'readonly'; will be used directly as a tag attribute.
+            If empty string, inputs will not be readonly.
+        callback_function_name (string) Name of Javascript function to call with data to save
+        
+        load_script_only (boolean)
+        load_script (boolean)
+        additional_class (string)
+        
+        do_not_trigger (boolean) If True, do not automatically trigger things like sign-in.
+        
+        multiple_reports_meta (dict) For if multiple-reports enabled.
+        
+        user_is_staff (boolean)
+    #}    
+    
+    {% set additional_class_selector = "[class~='{}']".format(additional_class)|safe if additional_class != '' else '' %}
+    {% set readonly = "readonly disabled" if readonly == "readonly" else readonly %}
+    
+    {% set unique_string = create_uuid() %}
+    
+    <style>
+        .sres-has-error {
+            background-color: #f2dede;
+        }
+    </style>
+    
+    <!--- display stuff --->
+    {% if (column.config.type == 'submission') or (column.config.type == 'signinout') or (column.config.type == 'signinoutmemory') %}
+        {% set signinout = ((column.config.type == 'signinout') or (column.config.type == 'signinoutmemory')) %}
+        {% set checkbox_checked = false %}
+        {% if signinout and column.config.sign_in_out.on_out != 'clear' %}
+            {% set checkbox_checked = true if data_to_display|length == 1 else false %}
+        {% else %}
+            {% set checkbox_checked = (data_to_display|string|length != 0) %}
+        {% endif %}
+        {% if not load_script_only %}
+            <div class="sres-input-container {% if signinout and entry_mode == 'single' %}d-none{% endif %}" data-sres-column-type="{{ column.config.type }}" data-sres-identifier="{{ student_identifier }}" data-sres-columnuuid="{{ column.config.uuid }}">
+                <input type="checkbox" class="sres-addvalue-timestamp-checkbox {{ additional_class }}" 
+                    data-toggle="toggle" data-size="small" data-sres-identifier="{{ student_identifier }}" 
+                    data-sres-columnuuid="{{ column.config.uuid }}" data-sres-field="toggle" data-sres-suspend-send-data="off"
+                    data-on="<span class='fa fa-check'></span>" data-off="<span class='fa fa-times'></span>" 
+                    {% if checkbox_checked %}checked{% endif %}>
+                {% if signinout %}
+                    <input type="hidden" class="sres-addvalue-timestamp-hidden" data-sres-columnuuid="{{ column.config.uuid }}" 
+                        data-sres-identifier="{{ student_identifier }}" value="{{ data_to_display|jsondump }}">
+                {% endif %}
+            </div>
+            {% if signinout and mode == 'single' %}
+                <div class="sres-addvalue-signinout-message sres-addvalue-signinout-welcome d-none">
+                    {{ column.config.sign_in_out.message_welcome|safe_no_script }}
+                    <p>Recorded as <span class="sres-addvalue-timestamp-value"></span></p>
+                </div>
+                <div class="sres-addvalue-signinout-message sres-addvalue-signinout-goodbye d-none">
+                    {{ column.config.sign_in_out.message_goodbye|safe_no_script }}
+                    <p>Recorded as <span class="sres-addvalue-timestamp-value"></span></p>
+                </div>
+            {% endif %}
+        {% endif %}
+        {% if signinout and not do_not_trigger %}
+            <script>
+                $(document).ready(function(){
+                    $("input:checkbox[data-sres-identifier][class~='sres-addvalue-timestamp-checkbox'][data-sres-columnuuid='{{ column.config.uuid }}']{{ additional_class_selector }}").bootstrapToggle('toggle');
+                });
+            </script>
+        {% endif %}
+        {% if mode == 'single' and request.endpoint == 'entry.add_value' and student_identifier != '__identifier__' and not signinout %}
+            <script>
+                $(document).ready(function(){
+                    $("input:checkbox.sres-addvalue-timestamp-checkbox{{ additional_class_selector }}").bootstrapToggle('on');
+                });
+            </script>
+        {% endif %}
+        {% if load_script or load_script_only %}
+            <script>
+                $("input:checkbox[data-sres-identifier][class~='sres-addvalue-timestamp-checkbox'][data-sres-columnuuid='{{ column.config.uuid }}']{{ additional_class_selector }}").on("change", function(){
+                    if ($(this).attr('data-sres-suspend-send-data') == 'on') {
+                        return false;
+                    }
+                    //console.log('bst onchange');
+                    var identifier = $(this).attr('data-sres-identifier');
+                    var now = moment().format('YYYY-MM-DD HH:mm:ss');
+                    var dataToSend = "";
+                    {% if signinout and column.config.sign_in_out.on_out != 'clear' %}
+                        var existingData = $(this).parents('.sres-input-container').find('.sres-addvalue-timestamp-hidden').val();
+                        if ($(this).prop('checked')) {
+                            //console.log('is checked!');
+                            dataToSend = JSON.stringify({'in': now});
+                        } else {
+                            //console.log('is not checked! existingData', existingData);
+                            existingData = JSON.parse(existingData);
+                            existingData['out'] = now;
+                            dataToSend = JSON.stringify(existingData);
+                        }
+                    {% else %}
+                        if ($(this).prop('checked')) {
+                            dataToSend = now;
+                        } else {
+                            dataToSend = "";
+                        }
+                    {% endif %}
+                    //console.log('dataToSend', dataToSend);
+                    {% if callback_function_name %}
+                        {{ callback_function_name }}(
+                            identifier, 
+                            dataToSend, 
+                            $(this).parent().parent(), 
+                            '{{ table.config.uuid }}', 
+                            '{{ column.config.uuid }}'
+                        );
+                        {% if signinout %}
+                            $('.sres-addvalue-signinout-message').addClass('d-none');
+                            $('.sres-addvalue-timestamp-value').html(dataToSend);
+                            if ($(this).prop('checked')) {
+                                $('.sres-addvalue-signinout-welcome').removeClass('d-none');
+                            } else {
+                                $('.sres-addvalue-signinout-goodbye').removeClass('d-none');
+                            }
+                        {% endif %}
+                    {% endif %}
+                });
+            </script>
+        {% endif %}
+    {% elif (column.config.type == 'mark') or (column.config.type == 'attendance') or (column.config.type == 'teacherallocation') or (show_simple_editor_override) %}
+        {% set buttons_multiple = (column.config.custom_options.select_from_list_mode == 'multiple' or column.config.type == 'teacherallocation') %}
+        {% if not load_script_only %}
+            <div class="sres-input-container" data-sres-column-type="{{ column.config.type }}" data-sres-identifier="{{ student_identifier }}" data-sres-columnuuid="{{ column.config.uuid }}">
+                {% if column.get_select_from_list_elements()|length > 0 %}
+                    <div class="btn-group flex-wrap" data-sres-select-mode="{% if buttons_multiple %}multiple{% else %}single{% endif %}" data-sres-field="select">
+                        {% for option in column.get_select_from_list_elements() %}
+                            {% set checked_state = "btn-outline-primary" %}
+                            {% if data_to_display|islist and option.value in data_to_display %}
+                                {% set checked_state = "btn-primary bb" %}
+                            {% elif column.config.type == 'teacherallocation' and option.value in data_to_display %}
+                                {% set checked_state = "btn-primary cc" %}
+                            {% elif data_to_display|string == option.value|string %}
+                                {% set checked_state = "btn-primary aa" %}
+                            {% endif %}
+                            <button type="button" 
+                                class="btn {{ checked_state }} sres-addvalue-sase-button {{ additional_class }}"
+                                value="{{ option.value }}" {{ readonly }} data-sres-identifier="{{ student_identifier }}" 
+                                data-sres-columnuuid="{{ column.config.uuid }}" data-sres-value="{{ option.value }}">
+                                {{ option.display }}
+                            </button>
+                        {% endfor %}
+                    </div>
+                    {% if mode == 'single' and buttons_multiple and readonly == '' %}
+                        <!--- in this case, show a separate save button --->
+                        <button type="button" class="btn btn-primary sres-addvalue-btn-save sres-addvalue-sase-button-save {{ additional_class }}" 
+                            data-sres-mode="{{ mode }}" data-sres-columnuuid="{{ column.config.uuid }}" 
+                            data-sres-identifier="{{ student_identifier }}">
+                            <span class="fa fa-save" aria-hidden="true"></span> {{ save_button_text }}
+                        </button>
+                    {% endif %}
+                {% endif %}
+                {% if (column.config.simple_input.allow_free == 'true' and column.config.type != 'teacherallocation') or (show_simple_editor_override) %}
+                    <div class="input-group">
+                        {% if mode == 'single' and column.config.custom_options.textentry_size == 'textarea' %}
+                            <textarea class="form-control sres-addvalue-sase-text {{ additional_class}}" 
+                                data-sres-field="regex-long" data-sres-identifier="{{ student_identifier }}" 
+                                data-sres-columnuuid="{{ column.config.uuid }}" {{ readonly }}
+                                >{{ data_to_display }}</textarea>
+                        {% else %}
+                            <input type="text" class="form-control sres-addvalue-sase-text {{ additional_class }}" 
+                                value="{{ data_to_display }}" data-sres-field="regex"
+                                data-sres-identifier="{{ student_identifier }}" data-sres-regex="{{ column.config.simple_input.allow_free_regex|safe }}" 
+                                data-sres-columnuuid="{{ column.config.uuid }}" tabindex="1" {{ readonly }}>
+                        {% endif %}
+                        <span class="input-group-btn">
+                            <button type="button" class="btn btn-primary sres-addvalue-btn-save sres-addvalue-sase-text-save {{ additional_class }}" 
+                                data-sres-mode="{{ mode }}" data-sres-columnuuid="{{ column.config.uuid }}" 
+                                data-sres-identifier="{{ student_identifier }}" {{ readonly }}>
+                                {% if readonly == '' %}
+                                    <span class="fa fa-save" aria-hidden="true"></span> {{ save_button_text }}
+                                {% else %}
+                                    Read-only
+                                {% endif %}
+                            </button>
+                        </span>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+        {% if load_script or load_script_only %}
+            {% if column.config.simple_input.allow_free == 'true' or show_simple_editor_override %}
+                {% if column.config.custom_options.textentry_size != 'textarea' %}
+                    <script>
+                        $("input:text[class~='sres-addvalue-sase-text'][data-sres-columnuuid='{{ column.config.uuid }}']{{ additional_class_selector }}").on('keyup', function(event){
+                            if (event.which == 13) { <!--- enter --->
+                                var identifier = $(this).attr('data-sres-identifier');
+                                $("button[class~=sres-addvalue-sase-text-save]{{ additional_class_selector }}[data-sres-columnuuid='{{ column.config.uuid }}'][data-sres-identifier='" + identifier + "']").trigger('click');
+                                event.preventDefault();
+                                return false;
+                            }
+                        });
+                    </script>
+                {% endif %}
+                <script>
+                    $("button[class~=sres-addvalue-sase-text-save]{{ additional_class_selector }}[data-sres-columnuuid='{{ column.config.uuid }}'][data-sres-identifier]").on("click", function(){
+                        var identifier = $(this).attr('data-sres-identifier');
+                        var displayMode = $(this).attr('data-sres-mode');
+                        var textarea = $("textarea[class~='sres-addvalue-sase-text']{{ additional_class_selector }}[data-sres-identifier='" + identifier + "'][data-sres-columnuuid='{{ column.config.uuid }}']");
+                        var textbox = $("input:text[class~='sres-addvalue-sase-text']{{ additional_class_selector }}[data-sres-identifier='" + identifier + "'][data-sres-columnuuid='{{ column.config.uuid }}']");
+                        var dataToSend = null;
+                        if (typeof textarea.val() != 'undefined') {
+                            dataToSend = textarea.val();
+                        } else if (typeof textbox.val() != 'undefined') {
+                            // Check regex
+                            if (textbox.val().match(new RegExp(textbox.attr('data-sres-regex'), 'gi'))) {
+                                // OK - proceed with send
+                                dataToSend = textbox.val();
+                            } else {
+                                var el = textbox.parent();
+                                el.addClass('has-error');
+                                setTimeout(function(){ el.removeClass('has-error'); }, 2000);
+                            }
+                        }
+                        if (dataToSend != null) {
+                            {{ callback_function_name }}(
+                                $(this).attr('data-sres-identifier'), 
+                                dataToSend, 
+                                {% if mode == 'roll' %}$(this).parent().parent().parent().parent(){% else %}$(this).parent(){% endif %}, 
+                                '{{ table.config.uuid }}', 
+                                '{{ column.config.uuid }}'
+                            );
+                        }
+                    });
+                </script>
+            {% endif %}
+            <script>
+                function getAddvalueButtonData{{ unique_string }}(identifier, columnuuid, buttonObj) { /* {{ additional_class_selector }} */
+                    let dataToSend = null;
+                    if (buttonObj.parent().attr('data-sres-select-mode') == 'multiple') {
+                        let tmpArr = [];
+                        $("button[data-sres-identifier='" + identifier + "'][class~='sres-addvalue-sase-button'][class~='btn-primary']{{ additional_class_selector }}[data-sres-columnuuid='" + columnuuid + "']").each(function() {
+                            tmpArr.push($(this).val());
+                        });
+                        dataToSend = JSON.stringify(tmpArr);
+                        //console.log('tmpArr', tmpArr);
+                    } else {
+                        dataToSend = buttonObj.val();
+                    }
+                    return dataToSend;
+                }
+                $("button[data-sres-identifier][class~='sres-addvalue-sase-button']{{ additional_class_selector }}[data-sres-columnuuid='{{ column.config.uuid }}']").on("click", function(){
+                    let identifier = $(this).attr('data-sres-identifier');
+                    let columnuuid = $(this).attr('data-sres-columnuuid');
+                    // Update appearance
+                    if ($(this).parent().attr('data-sres-select-mode') == 'multiple') {
+                        $(this).toggleClass('btn-primary').toggleClass('btn-outline-primary');
+                    } else {
+                        $("button[data-sres-identifier='" + identifier + "'][class~='sres-addvalue-sase-button']{{ additional_class_selector }}[data-sres-columnuuid='" + columnuuid + "']").removeClass('btn-primary').addClass('btn-outline-primary');
+                        $(this).addClass('btn-primary').removeClass('btn-outline-primary');
+                    }
+                    {% if mode == 'roll' or (mode == 'single' and not buttons_multiple) %}
+                        let dataToSend = getAddvalueButtonData{{ unique_string }}(identifier, columnuuid, $(this));
+                        {{ callback_function_name }}(
+                            identifier, 
+                            dataToSend, 
+                            {% if mode == 'roll' %}$(this).parent().parent().parent(){% else %}$(this).parent().parent(){% endif %}, 
+                            '{{ table.config.uuid }}', 
+                            '{{ column.config.uuid }}'
+                        );
+                    {% endif %}
+                });
+            </script>
+            {% if mode == 'single' and buttons_multiple %}
+                <script>
+                    $("button[class~='sres-addvalue-sase-button-save']{{ additional_class_selector }}[data-sres-columnuuid='{{ column.config.uuid }}']").on('click', function(){
+                        let identifier = $(this).attr('data-sres-identifier');
+                        let dataToSend = getAddvalueButtonData{{ unique_string }}(identifier, $(this).attr('data-sres-columnuuid'), $(this).parent().find('div[class~=btn-group] button'));
+                        {{ callback_function_name }}(
+                            identifier, 
+                            dataToSend, 
+                            $(this).parent(), 
+                            '{{ table.config.uuid }}', 
+                            '{{ column.config.uuid }}'
+                        );
+                    });
+                </script>
+            {% endif %}
+        {% endif %}
+    {% elif column.config.type == 'multiEntry' or column.config.multientry_data_format == True %}
+        <!--- presentation --->
+        {% if not load_script_only %}
+            {% set existing_data = data_to_display %}
+            {% set accordion_set = namespace(set_number=0, collapsed=false, mode='') %}
+            <!-- display the report-number toggler and related buttons if necessary -->
+            {% if column.config.custom_options.multiple_reports_mode == 'enabled' %}
+                <div class="card mb-2 sres-report-toggler-container" data-sres-columnuuid="{{ column.config.uuid }}" data-sres-identifier="{{ student_identifier }}"
+                    data-sres-report-toggler-current-index="{{ multiple_reports_meta.count }}" data-sres-report-toggler-max-index="{{ multiple_reports_meta.count }}">
+                    <div class="card-body form-inline">
+                        <div class="btn-group mr-2" role="group" aria-label="Controls each report">
+                            <button type="button" class="btn btn-outline-primary sres-ignore-dirty sres-report-toggler-first" title="First report"><span class="fa fa-angle-double-left"></span></button>
+                            <button type="button" class="btn btn-outline-primary sres-ignore-dirty sres-report-toggler-previous" title="Previous report"><span class="fa fa-angle-left"></span></button>
+                        </div>
+                        <div class="input-group mr-2">
+                            <div class="input-group-prepend">
+                                <span class="input-group-text">Report</span>
+                            </div>
+                            <input type="number" size="4" class="form-control sres-ignore-dirty sres-report-toggler-current-display" value="{{ multiple_reports_meta.count }}">
+                            <div class="input-group-append">
+                                <span class="input-group-text"> of&nbsp;<span class="sres-report-toggler-max-display">{{ multiple_reports_meta.count }}</span></span>
+                            </div>
+                        </div>
+                        <div class="btn-group mr-2" role="group" aria-label="Controls each report">
+                            <button type="button" class="btn btn-outline-primary sres-ignore-dirty sres-report-toggler-new" title="New report"><span class="fa fa-plus"></span></button>
+                            {# TODO <button type="button" class="btn btn-outline-primary sres-report-toggler-delete" title="Delete report"><span class="fa fa-trash"></span></button> #}
+                        </div>
+                        <div class="btn-group mr-2" role="group" aria-label="Controls each report">
+                            <button type="button" class="btn btn-outline-primary sres-ignore-dirty sres-report-toggler-next" title="Next report"><span class="fa fa-angle-right"></span></button>
+                            <button type="button" class="btn btn-outline-primary sres-ignore-dirty sres-report-toggler-last" title="Last report"><span class="fa fa-angle-double-right"></span></button>
+                        </div>
+                        <span class="sres-report-toggler-spinner d-none"><span class="fa fa-circle-notch spinning"></span></span>
+                    </div>
+                </div>
+            {% endif %}
+            <!--- display --->
+            <div class="{% if mode == 'roll' and column.config.custom_options.rollview_popout_editor == 'inline' %}form-inline{% elif mode == 'single' %}form-group{% else %}form-group{% endif %} sres-input-container" 
+                data-sres-column-type="{{ column.config.type }}" data-sres-identifier="{{ student_identifier }}" data-sres-columnuuid="{{ column.config.uuid }}">
+                {% for a in range(0, column.config.multi_entry.options|length) %}
+                    {% set multientry_option = column.config.multi_entry.options[a] %}
+                    {% if multientry_option.type == 'label-only' %}
+                        {% if multientry_option.accordion_header in ['collapsible', 'collapsed', 'break'] %}
+                            {% set accordion_set.mode = multientry_option.accordion_header %}
+                            {% set accordion_set.set_number = accordion_set.set_number + 1 %}
+                            {% if multientry_option.accordion_header == 'collapsed' %}
+                                {% set accordion_set.collapsed = true %}
+                            {% else %}
+                                {% set accordion_set.collapsed = false %}
+                            {% endif %}
+                        {% else %}
+                            {% set accordion_set.mode = '' %}
+                        {% endif %}
+                    {% else %}
+                        {% set accordion_set.mode = '' %}
+                    {% endif %}
+                    <div class="form-group collapse {% if accordion_set.collapsed == true and accordion_set.mode == '' %}{% else %}show{% endif %} mr-2 mb-2" data-sres-subfield-n="{{ a }}" 
+                        data-sres-multientry-render-calculated-value="{{ multientry_option.render_calculated_value }}"
+                        data-sres-accordion-set-number="{{ accordion_set.set_number }}" data-sres-accordion-set-header="{{ multientry_option.accordion_header }}">
+                    {% if multientry_option.type == 'label-only' %}
+                        {% set data_to_display = '' %}
+                    {% else %}
+                        {% if existing_data is iterable and a < existing_data|length %}
+                            {% set data_to_display = existing_data[a] %}
+                        {% else %}
+                            {% set data_to_display = '' %}    
+                        {% endif %}
+                    {% endif %}
+                    {% set field_required = 'required' if multientry_option.required == '1' else '' %}
+                    {% if multientry_option.editing_allowed_by == 'staff' and not user_is_staff %}
+                        {% set readonly_status = 'readonly disabled' %}
+                    {% else %}
+                        {% set readonly_status = readonly %}
+                    {% endif %}
+                    {% if multientry_option.type in ['select', 'dropdown', 'slider'] %}
+                        {% set opt = namespace(multientry_show_more_descriptions=false) %}
+                        {% if mode == 'single' %}
+                            {% for multientry_option_select_item in column.get_select_from_list_elements(multi_entry_subfield=a) if multientry_option_select_item.description|length > 0 %}
+                                {% set opt.multientry_show_more_descriptions = true %}
+                            {% endfor %}
+                        {% endif %}
+                    {% endif %}
+                    <!-- display -->
+                    {% if multientry_option.type in ['select', 'dropdown'] %}
+                        <!--- prepare a few things --->
+                        <!--- display --->
+                        <label for="{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}" class="mr-2 sres-field-label">{{ multientry_option.label|safe_no_script }}</label>
+                        {% if opt.multientry_show_more_descriptions %}
+                            <button class="btn btn-light btn-xs float-right" type="button" data-toggle="collapse" data-target="#{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}_more" aria-label="Show more descriptors"><span class="fa fa-th" aria-hidden="true"></span></button>
+                        {% endif %}
+                        {% if mode == 'single' %}
+                            <br />
+                        {% endif %}
+                        {% if multientry_option.type == "select" %}
+                            <div data-sres-field="{{ multientry_option.type }}" data-sres-selectmode="{{ multientry_option.selectmode }}" 
+                                    data-sres-target-id="{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}"
+                                    {% if multientry_option.select_display_mode in ['btn-group', 'btn-group-vertical'] %}
+                                        class="{{ multientry_option.select_display_mode }} flex-wrap" role="group" 
+                                    {% elif multientry_option.select_display_mode == 'vertical-list' %}
+                                        class="row"
+                                    {% else %}
+                                        class="btn-group flex-wrap" role="group" 
+                                    {% endif %}
+                                    >
+                                <!-- buttons -->
+                                {% for multientry_option_select in column.get_select_from_list_elements(multi_entry_subfield=a) %}
+                                    <!--- determine if already selected --->
+                                    {% if (multientry_option.selectmode == "multiple" and data_to_display is iterable and multientry_option_select.value|string in data_to_display) or ((multientry_option.selectmode == "single" or multientry_option.selectmode|length == 0) and data_to_display|string == multientry_option_select.value|string) %}
+                                        {% set checked_class = "btn-primary" %}
+                                    {% else %}
+                                        {% set checked_class = "btn-outline-primary" %}
+                                    {% endif %}
+                                    <!--- display --->
+                                    {% if multientry_option.select_display_mode == 'vertical-list' %}
+                                        <div class="col-sm-12 mb-2">
+                                    {% endif %}
+                                        <button type="button" {{ field_required }} {{ readonly_status }}
+                                            class="btn sres-addvalue-multientry-button {{ checked_class }} {{ additional_class }} {% if multientry_option.select_display_mode == 'vertical-list' %}btn-block text-left sres-white-space-normal{% endif %}" 
+                                            data-sres-value="{{ multientry_option_select.value }}" data-sres-columnuuid="{{ column.config.uuid }}">
+                                            {{ multientry_option_select.display }}
+                                        </button>
+                                    {% if multientry_option.select_display_mode == 'vertical-list' %}
+                                        </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        {% elif multientry_option.type == "dropdown" %}
+                            <div class="btn-group flex-wrap" role="group" 
+                                    data-sres-field="{{ multientry_option.type }}" data-sres-selectmode="{{ multientry_option.selectmode }}" 
+                                    data-sres-target-id="{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}">
+                                <!-- dropdown/select -->
+                                <select data-sres-columnuuid="{{ column.config.uuid }}" {{ field_required }} {{ readonly_status }} 
+                                    {% if multientry_option.selectmode == "multiple" %}multiple class="selectpicker sres-addvalue-multientry-dropdown {{ additional_class }}"{% else %}class="selectpicker sres-addvalue-multientry-dropdown {{ additional_class }}"{% endif %} 
+                                    data-width="fit" id="{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}">
+                                    {% if multientry_option.selectmode != "multiple" %}
+                                        <option></option>
+                                    {% endif %}
+                                    {% for multientry_option_select in column.get_select_from_list_elements(multi_entry_subfield=a) %}
+                                        <!--- determine if already selected --->
+                                        {% if (multientry_option.selectmode == "multiple" and data_to_display is iterable and multientry_option_select.value|string in data_to_display) or (multientry_option.selectmode == "single" and data_to_display|string == multientry_option_select.value|string) %}
+                                            {% set option_selected = "selected" %}
+                                        {% else %}
+                                            {% set option_selected = "" %}
+                                        {% endif %}
+                                        <!--- display --->
+                                        <option data-sres-value="{{ multientry_option_select.value }}" data-sres-columnuuid="{{ column.config.uuid }}" {{ option_selected }}>{{ multientry_option_select.display }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        {% endif %}
+                        {% if mode == 'single' %}
+                            {% if opt.multientry_show_more_descriptions %}
+                                <div class="collapse card card-body sres-multientry-more" id="{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}_more">
+                                    {% for multientry_item in column.get_select_from_list_elements(multi_entry_subfield=a) %}
+                                        <p>
+                                            <button type="button" class="btn btn-outline-primary mr-2 {{ additional_class }} sres-white-space-normal" data-sres-multientry-item-value="{{ multientry_item.value }}" {{ readonly_status }}>{{ multientry_item.display }}</button>
+                                            {{ multientry_item.description|nltobr }}
+                                        </p>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        {% endif %}
+                    {% elif multientry_option.type in ['regex', 'regex-long', 'html-simple'] %}
+                        <label for="{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}" class="mr-2 sres-field-label">{{ multientry_option.label|safe_no_script }}</label>
+                        {% if mode == 'single' %}
+                            <br />
+                        {% endif %}
+                        {% if multientry_option.type == "regex-long" %}
+                            <textarea class="form-control sres-addvalue-text {{ additional_class }}" id="{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}"
+                                data-sres-regex="{{ multientry_option.regex|safe }}" 
+                                data-sres-columnuuid="{{ column.config.uuid }}" data-sres-field="{{ multientry_option.type }}"
+                                {{ field_required }} {{ readonly_status }}>{{ data_to_display }}</textarea>
+                        {% elif multientry_option.type == "regex" %}
+                            <input data-sres-field="{{ multientry_option.type }}" type="text" value="{{ data_to_display }}" 
+                                class="form-control sres-addvalue-text {{ additional_class }}" 
+                                {% if multientry_option.render_calculated_value == 'yes' %}readonly{% endif %}
+                                data-sres-regex="{{ multientry_option.regex|safe }}" data-sres-columnuuid="{{ column.config.uuid }}"
+                                id="{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}" {{ field_required }} {{ readonly_status }}>
+                        {% elif multientry_option.type == 'html-simple' %}
+                            <div class="border p-2 sres-addvalue-text sres-addvalue-html-simple {% if readonly_status == '' %}sres-addvalue-tinymce-simple{% else %}sres-addvalue-tinymce-simple-readonly bg-light{% endif %} {{ additional_class }}" 
+                                    id="{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}"
+                                    data-sres-columnuuid="{{ column.config.uuid }}" data-sres-field="{{ multientry_option.type }}"
+                                    {{ field_required }} {{ readonly_status }}>
+                                {{ data_to_display|safe }}
+                            </div>
+                        {% endif %}
+                    {% elif multientry_option.type in ['slider'] %}
+                        <div class="mb-4">
+                            <label for="{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}" class="mr-2 sres-field-label">{{ multientry_option.label|safe_no_script }}
+                                {% if opt.multientry_show_more_descriptions %}
+                                    <button class="btn btn-light btn-xs float-right sres-slider-show-descriptions" type="button" data-toggle="collapse" data-target="#{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}_more" aria-label="Show more descriptors"><span class="fa fa-th" aria-hidden="true"></span></button>
+                                {% endif %}
+                            </label>
+                            <div class="d-none sres-slider-misconfiguration-warning mt-2 mb-2">
+                                <span class="alert alert-warning">
+                                    <span class="fa fa-exclamation-triangle"></span>
+                                    This slider appears to be misconfigured. Please contact your coordinator or administrator.
+                                </span>
+                            </div>
+                            <input type="text" class="js-range-slider js-range-slider-{{ column.config.uuid }}-{{ a }} {{ additional_class }}"
+                                data-sres-value="{{ data_to_display }}" data-from="{{ data_to_display }}"
+                                data-sres-field="{{ multientry_option.type }}" data-sres-subfield="{{ a }}"
+                                data-sres-identifier="{{ student_identifier }}" data-sres-columnuuid="{{ column.config.uuid }}"
+                                {% if readonly_status %}data-disable="true"{% endif %} {{ field_required }} {{ readonly_status }}
+                                {% if multientry_option.render_calculated_value == 'yes' %}data-block="true"{% endif %}
+                                id="{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}"
+                                name="{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}">
+                            {% if opt.multientry_show_more_descriptions %}
+                                <div class="collapse card card-body sres-multientry-more mt-4" id="{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}_more">
+                                    {% for multientry_item in column.get_select_from_list_elements(multi_entry_subfield=a) %}
+                                        <div class="mb-2">
+                                            <span class="sres-form-label">{{ multientry_item.display }}</span>
+                                            {{ multientry_item.description }}
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% elif multientry_option.type in ['authuser', 'timestamp'] %}
+                        <div data-sres-field="{{ multientry_option.type }}" class="hidden">
+                            <input type="hidden" name="" value="{% if multientry_option.type == 'authuser' %}{{ auth_user }}{% endif %}">
+                        </div>
+                    {% elif multientry_option.type in ['geolocation'] %}
+                        <div data-sres-field="geolocation" class="hidden">
+                            <input type="hidden" data-sres-columnuuid="{{ column.config.uuid }}" id="{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}" value="">
+                        </div>
+                    {% elif multientry_option.type in ['label-only'] %}
+                        <div class="row">
+                            <div class="col">
+                                <div class="sres-field-label">{{ multientry_option.label|safe_no_script }}</div>
+                                <div data-sres-field="{{ multientry_option.type }}" class="hidden">
+                                    <input type="hidden" name="" value="" />
+                                </div>
+                            </div>
+                            {% if multientry_option.accordion_header in ['collapsible', 'collapsed'] or multientry_option.extra_save_button == 'show' %}
+                                <div class="col">
+                                    {% if multientry_option.extra_save_button == 'show' %}
+                                        <button type="button" class="btn btn-sm btn-primary float-right ml-2 mt-2 sres-addvalue-btn-save sres-addvalue-save-extra {{ additional_class }}" 
+                                            data-sres-columnuuid="{{ column.config.uuid }}" data-sres-identifier="{{ student_identifier }}"
+                                            data-sres-additional-class-selector="{{ additional_class_selector }}">
+                                            <span class="fa fa-save" aria-hidden="true"></span> {{ save_button_text }}
+                                        </button>
+                                    {% endif %}
+                                    {% if multientry_option.accordion_header in ['collapsible', 'collapsed'] %}
+                                        <button type="button" class="btn btn-sm sres-ignore-dirty {% if multientry_option.accordion_header == 'collapsed' %}btn-light{% else %}btn-outline-primary{% endif %} float-right ml-2 mt-2 sres-accordion-set-btn sres-accordion-set-collapse" title="Collapse"><span class="fa fa-angle-up"></span><span class="d-none d-lg-inline"> Collapse</span></button>
+                                        <button type="button" class="btn btn-sm sres-ignore-dirty btn-outline-primary float-right ml-2 mt-2 sres-accordion-set-btn sres-accordion-set-collapse-all" title="Collapse all"><span class="fa fa-angle-double-up"></span><span class="d-none d-lg-inline"> Collapse all</span></button>
+                                        <button type="button" class="btn btn-sm sres-ignore-dirty {% if multientry_option.accordion_header == 'collapsed' %}btn-outline-primary{% else %}btn-light{% endif %} float-right ml-2 mt-2 sres-accordion-set-btn sres-accordion-set-expand" title="Expand"><span class="fa fa-angle-down"></span><span class="d-none d-lg-inline"> Expand</span></button>
+                                        <button type="button" class="btn btn-sm sres-ignore-dirty btn-outline-primary float-right ml-2 mt-2 sres-accordion-set-btn sres-accordion-set-expand-all" title="Expand all"><span class="fa fa-angle-double-down"></span><span class="d-none d-lg-inline"> Expand all</span></button>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% elif multientry_option.type in ['audio-recording'] %}
+                        <div>
+                            <div>
+                                <label class="sres-field-label">{{ multientry_option.label|safe_no_script }}</label>
+                            </div>
+                            {% if not readonly_status %}
+                                <button type="button" class="btn btn-outline-primary sres-audio-recording-record">
+                                    <span class="fa fa-microphone" aria-hidden="true"></span>
+                                    Record audio clip
+                                </button>
+                                <button type="button" class="btn btn-outline-danger sres-audio-recording-delete-all sres-ignore-dirty">
+                                    <span class="fa fa-trash" aria-hidden="true"></span>
+                                    Delete all
+                                </button>
+                            {% endif %}
+                            <div id="{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}" class="sres-audio-recording-recordings-container mt-2 {{ additional_class }}" 
+                                data-sres-identifier="{{ student_identifier }}" data-sres-field="{{ multientry_option.type }}" data-sres-columnuuid="{{ column.config.uuid }}"
+                                data-sres-saved-recordings="{{ data_to_display|jsondump }}" {{ field_required }} {{ readonly_status }}>
+                            </div>
+                        </div>
+                    {% elif multientry_option.type in ['sketch-small'] %}
+                        <div>
+                            <input type="hidden" data-sres-field="sketch-small" data-sres-columnuuid="{{ column.config.uuid }}" id="{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}" 
+                                value="{{ data_to_display }}" class="{{ additional_class }}" {{ field_required }} {{ readonly_status }}>
+                            <label class="sres-field-label">{{ multientry_option.label|safe_no_script }}</label>
+                            <div class="sres-sketch-container" style="width:100%;">
+                                <canvas id="sres_sketch_{{ range(1000, 100000)|random }}" height="100" width="300" class="sres-sketch-area sres-sketch-small">
+                            </div>
+                            <button type="button" class="sres-sketch-clear btn btn-outline-primary" {{ readonly_status }} aria-label="Clear sketch">
+                                <span class="fa fa-times" aria-hidden="true"></span>
+                            </button>
+                        </div>
+                    {% endif %}
+                    {% if mode == 'single' %}
+                        {% if multientry_option.type in ['select', 'dropdown'] %}<br />{% endif %}
+                    {% endif %}
+                    </div>
+                    
+                    {# emit event upon value change for some subfield types #}
+                    <script>
+                        // Emit event if need be
+                        $(document).ready(function(){
+                            let args = {
+                                columnUuid: '{{ column.config.uuid }}',
+                                subfield: '{{ a }}',
+                                identifier: '{{ student_identifier }}',
+                                type: '{{ multientry_option.type }}'
+                            }
+                            triggerMultientryAggregation('{{ multientry_option.type }}', args);
+                        });
+                    </script>
+                    
+                    {# triggers for subfield calculations #}
+                    {% if multientry_option.render_calculated_value == 'yes' %}
+                        <script>
+                            // Establish calculation event
+                            $(document).on('sres:addvaluesubfieldchanged', function(event, args) {
+                                // Gather source subfields
+                                let sourceSubfields = {{ (multientry_option.render_calculated_value_config.subfields or [])|tojson }};
+                                let sourceSubfieldsMultipliers = {{ (multientry_option.render_calculated_value_config.subfield_multipliers or [])|tojson }};
+                                // Check if we should run
+                                if (sourceSubfields.indexOf(args.subfield) > -1) {
+                                    // great, continue
+                                } else {
+                                    return;
+                                }
+                                // Protect against circular references
+                                if (sourceSubfields.indexOf('{{ a }}') != -1) {
+                                    console.error('Circular reference', args, sourceSubfields);
+                                    return;
+                                }
+                                // continue
+                                if (args.columnUuid != '{{ column.config.uuid }}') {
+                                    return;
+                                }
+                                {% if mode == 'single' and entry_mode == 'roll' and column.config.custom_options.rollview_popout_editor == 'popout' %}
+                                    {# check that identifier is not blank #}
+                                    if (!args.identifier) {
+                                        return;
+                                    }
+                                {% else %}
+                                    if (args.identifier != '{{ student_identifier }}') {
+                                        return;
+                                    }
+                                {% endif %}
+                                // Gather source values
+                                let allValues = collectMultientryData(args.sourceElement.parents('.sres-input-container').find("[data-sres-field]"));
+                                let values = [];
+                                sourceSubfields.forEach(function(sourceSubfield){
+                                    let currentSubfield = parseInt(sourceSubfield);
+                                    let currentValue = allValues[currentSubfield];
+                                    values.push(currentValue);
+                                });
+                                // Calculate aggregation
+                                finalValue = performMultientryAggregation(
+                                    values, 
+                                    '{{ (multientry_option.render_calculated_value_config.blank_treatment or "ignore") }}',
+                                    '{{ (multientry_option.render_calculated_value_config.method or "sum") }}',
+                                    '{{ (multientry_option.render_calculated_value_config.rounding or "no") }}',
+                                    false,
+                                    '{{ (multientry_option.render_calculated_value_config.multiplier or 1) }}',
+                                    sourceSubfieldsMultipliers
+                                );
+                                // Render
+                                {% if multientry_option.type == 'regex' %}
+                                    $('#{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}').val(finalValue).trigger('change');
+                                {% elif multientry_option.type == 'slider' %}
+                                    updateRangeSlider('{{ column.config.uuid }}', '{{ a }}', args.identifier /*'{{ student_identifier }}'*/, finalValue);
+                                    $('#{{ column.config.uuid }}_{{ a }}_{{ student_identifier }}').trigger('sres:rangesliderrendered');
+                                {% endif %}
+                            });
+                        </script>
+                    {% endif %}
+                    
+                {% endfor %}
+                {% if mode == 'single' %}
+                    <!--br /-->
+                {% endif %}
+                {% if readonly == '' %}
+                    <!--- save button --->
+                    <button type="button" class="btn btn-primary mb-2 sres-addvalue-btn-save sres-addvalue-save {{ additional_class }} {% if mode == 'single' %}btn-block{% endif %}" 
+                        data-sres-columnuuid="{{ column.config.uuid }}" data-sres-identifier="{{ student_identifier }}" >
+                        <span class="fa fa-save" aria-hidden="true"></span> {{ save_button_text }}
+                    </button>
+                {% endif %}
+            </div>
+        {% endif %}
+        <!--- script --->
+        {% if load_script or load_script_only %}
+            <!--- triggers from 'more' panels --->
+            <script>
+                $("button[data-sres-multientry-item-value]{{ additional_class_selector }}").on('click', function(){
+                    let dataField = $(this).closest('.sres-multientry-more').prev('[data-sres-field]');
+                    let thisValue = $(this).attr('data-sres-multientry-item-value');
+                    let fieldType = dataField.attr('data-sres-field');
+                    let selectMode = dataField.attr('data-sres-selectmode');
+                    // Trigger main form element
+                    switch (fieldType) {
+                        case 'dropdown':
+                            let dropdownOption = dataField.find("select option[data-sres-value='" + thisValue + "']");
+                            dropdownOption.prop('selected', !dropdownOption.prop('selected'));
+                            dropdownOption.parent().selectpicker('refresh').trigger('change');
+                            break;
+                        case 'select':
+                            dataField.find("button[data-sres-value='" + thisValue + "']{{ additional_class_selector }}").trigger('click');
+                            break;
+                    }
+                });
+                function updateMoreFields_{{ unique_string }}(targetId, type) {
+                    let targetMoreSelector = "[id='" + targetId + "_more']";
+                    let wrapperSelector = null;
+                    if ($(targetMoreSelector).length) {
+                        // The 'more' box exists
+                        switch (type) {
+                            case 'button':
+                                wrapperSelector = "[data-sres-target-id='" + targetId + "']";
+                                $(wrapperSelector + " button").each(function(){
+                                    let thisValue = $(this).attr('data-sres-value');
+                                    let targetButton = $(targetMoreSelector + " button[data-sres-multientry-item-value='" + thisValue + "']");
+                                    if ($(this).hasClass('btn-primary')) targetButton.addClass('btn-primary').removeClass('btn-outline-primary');
+                                    if ($(this).hasClass('btn-outline-primary')) targetButton.addClass('btn-outline-primary').removeClass('btn-primary');
+                                });
+                                break;
+                            case 'dropdown':
+                                wrapperSelector = "[data-sres-target-id='" + targetId + "']";
+                                let dropdownElement = $(wrapperSelector + " select{{ additional_class_selector }}");
+                                dropdownElement.find("option[data-sres-value]").each(function(){
+                                    let thisValue = $(this).attr('data-sres-value');
+                                    let targetButton = $(targetMoreSelector + " button[data-sres-multientry-item-value='" + thisValue + "']");
+                                    let isSelected = $(this).is(':selected');
+                                    if (isSelected) {
+                                        targetButton.addClass('btn-primary').removeClass('btn-outline-primary');
+                                    } else {
+                                        targetButton.addClass('btn-outline-primary').removeClass('btn-primary');
+                                    }
+                                });
+                                break;
+                        }
+                    } else {
+                        //console.log('the more field doesn\'t exist', targetId, type);
+                    }
+                }
+                // call updateMoreFields upon load
+                $(document).ready(function(){
+                    $("select[class~=sres-addvalue-multientry-dropdown]{{ additional_class_selector }}").each(function() {
+                        updateMoreFields_{{ unique_string }}($(this).closest('[data-sres-field]').attr('data-sres-target-id'), 'dropdown');
+                    });
+                    $("button[class~='sres-addvalue-multientry-button'][data-sres-columnuuid={{ column.config.uuid }}]{{ additional_class_selector }}").each(function() {
+                        updateMoreFields_{{ unique_string }}($(this).parents('[data-sres-field]').attr('data-sres-target-id'), 'button');
+                    });
+                });
+            </script>
+            {% if readonly == '' %}
+                <!--- processing usual inputs --->
+                <script>
+                    $("select[class~=sres-addvalue-multientry-dropdown]{{ additional_class_selector }}").on('changed.bs.select change', function(event){
+                        // Trigger update of sres-multientry-more if applicable
+                        updateMoreFields_{{ unique_string }}($(this).closest('[data-sres-field]').attr('data-sres-target-id'), 'dropdown');
+                    });
+                    $("button.sres-addvalue-multientry-button[data-sres-columnuuid={{ column.config.uuid }}]{{ additional_class_selector }}").on('click', function() {
+                        let selectMode = $(this).parents('[data-sres-field]').attr('data-sres-selectmode');
+                        if (selectMode == 'single') {
+                            $(this).parents('[data-sres-field]').find('.sres-addvalue-multientry-button').removeClass('btn-primary').addClass('btn-outline-primary');
+                            $(this).removeClass('btn-outline-primary').addClass('btn-primary');
+                        } else if (selectMode == 'multiple') {
+                            $(this).toggleClass('btn-primary').toggleClass('btn-outline-primary');
+                        }
+                        // Trigger update of sres-multientry-more if applicable
+                        $(this).trigger('sres:updatemorefields');
+                    });
+                    $("button.sres-addvalue-multientry-button[data-sres-columnuuid={{ column.config.uuid }}]{{ additional_class_selector }}").on('sres:updatemorefields', function() {
+                        updateMoreFields_{{ unique_string }}($(this).parents('[data-sres-field]').attr('data-sres-target-id'), 'button');
+                    });
+                    $("button[class~='sres-addvalue-save'][data-sres-columnuuid={{ column.config.uuid }}]{{ additional_class_selector }}").on('click', function(event){
+                        // Check pattern of any text inputs
+                        let hasErrorClasses = 'sres-has-error';
+                        let invalidElements = [];
+                        let validationError = false;
+                        $(this).parent().find("input:text[class~='sres-addvalue-text']{{ additional_class_selector }}").each(function(){
+                            let pattern = new RegExp($(this).attr('data-sres-regex'), 'gi');
+                            if (!$(this).val().match(pattern)) {
+                                let el = $(this);
+                                el.addClass(hasErrorClasses);
+                                //setTimeout(function(){ el.removeClass(hasErrorClasses); }, 2000);
+                                validationError = true;
+                                invalidElements.push($(this));
+                            }
+                        });
+                        // Check for missing required fields - buttons
+                        $(this).parents('.sres-input-container').find("button[class~='sres-addvalue-multientry-button'][data-sres-columnuuid={{ column.config.uuid }}]{{ additional_class_selector }}[required]").each(function(){
+                            let el = $(this).parents('[data-sres-subfield-n]');
+                            if ($(this).hasClass('btn-primary') || $(this).siblings('.btn-primary').length > 0) {
+                                // passed
+                                el.removeClass(hasErrorClasses);
+                            } else {
+                                el.addClass(hasErrorClasses);
+                                //setTimeout(function(){ el.removeClass(hasErrorClasses); }, 2000);
+                                validationError = true;
+                                invalidElements.push($(this));
+                            }
+                        });
+                        // Check for missing required fields - textboxes
+                        $(this).parents('.sres-input-container').find("input:text[class~='sres-addvalue-text'][data-sres-columnuuid={{ column.config.uuid }}]{{ additional_class_selector }}[required]").each(function(){
+                            let el = $(this).parents('[data-sres-subfield-n]');
+                            if ($(this).val().length == 0) {
+                                el.addClass(hasErrorClasses);
+                                //setTimeout(function(){ el.removeClass(hasErrorClasses); }, 2000);
+                                validationError = true;
+                                invalidElements.push($(this));
+                            } else {
+                                // passed
+                                el.removeClass(hasErrorClasses);
+                            }
+                        });
+                        // Check for missing required fields - textarea
+                        $(this).parents('.sres-input-container').find("textarea[class~='sres-addvalue-text'][data-sres-columnuuid={{ column.config.uuid }}]{{ additional_class_selector }}[required]").each(function(){
+                            let el = $(this).parents('[data-sres-subfield-n]');
+                            if ($(this).val().length == 0) {
+                                el.addClass(hasErrorClasses);
+                                //setTimeout(function(){ el.removeClass(hasErrorClasses); }, 2000);
+                                validationError = true;
+                                invalidElements.push($(this));
+                            } else {
+                                // passed
+                                el.removeClass(hasErrorClasses);
+                            }
+                        });
+                        // Check for missing required fields - html-simple rich text editor
+                        $(this).parents('.sres-input-container').find("div.sres-addvalue-html-simple.sres-addvalue-text[data-sres-columnuuid={{ column.config.uuid }}]{{ additional_class_selector }}[required]").each(function(){
+                            let el = $(this).parents('[data-sres-subfield-n]');
+                            if (tinymce.get( $(this).attr('id') ).getContent().length == 0) {
+                                el.addClass(hasErrorClasses);
+                                validationError = true;
+                                invalidElements.push($(this));
+                            } else {
+                                // passed
+                                el.removeClass(hasErrorClasses);
+                            }
+                        });
+                        // Check for missing required fields - dropdowns
+                        $(this).parents('.sres-input-container').find("select[class~='sres-addvalue-multientry-dropdown'][data-sres-columnuuid={{ column.config.uuid }}]{{ additional_class_selector }}[required]").each(function(){
+                            if ($(this).siblings('button.dropdown-toggle').length == 0) {
+                                // standard dropdown
+                                let el = $(this).parents('[data-sres-subfield-n]');
+                                if ($(this).val().length == 0) {
+                                    el.addClass(hasErrorClasses);
+                                    //setTimeout(function(){ el.removeClass(hasErrorClasses); }, 2000);
+                                    validationError = true;
+                                    invalidElements.push($(this));
+                                } else {
+                                    // passed
+                                    el.removeClass(hasErrorClasses);
+                                }
+                            } else {
+                                // bootstrap-selectpicker
+                                let el = $(this).siblings('button.dropdown-toggle').parents('[data-sres-subfield-n]');
+                                if ($(this).val() === null || $(this).val().length == 0) {
+                                    el.addClass(hasErrorClasses);
+                                    //setTimeout(function(){ el.removeClass(hasErrorClasses); }, 2000);
+                                    validationError = true;
+                                    invalidElements.push($(this));
+                                } else {
+                                    // passed
+                                    el.removeClass(hasErrorClasses);
+                                }
+                            }
+                        });
+                        // Check for missing required fields - audio-recording
+                        $(this).parents('.sres-input-container').find("div[data-sres-field='audio-recording'][data-sres-columnuuid='{{ column.config.uuid }}']{{ additional_class_selector }}[required]").each(function(){
+                            let savedRecordings = $(this).attr('data-sres-saved-recordings');
+                            let audioControls = $(this).find('audio[data-sres-audio-filename]');
+                            let el = $(this).parents('[data-sres-subfield-n]');
+                            if (audioControls.length == 0) {
+                                el.addClass(hasErrorClasses);
+                                //setTimeout(function(){ el.removeClass(hasErrorClasses); }, 2000);
+                                validationError = true;
+                                invalidElements.push($(this));
+                            }  else {
+                                // passed
+                                el.removeClass(hasErrorClasses);
+                            }
+                        });
+                        // Check for missing required fields - sketch
+                        $(this).parents('.sres-input-container').find("input:hidden[data-sres-field='sketch-small'][data-sres-columnuuid='{{ column.config.uuid }}']{{ additional_class_selector }}[required]").each(function(){
+                            let el = $(this).parents('[data-sres-subfield-n]');
+                            if ($(this).val().length == 0) {
+                                el.addClass(hasErrorClasses);
+                                //setTimeout(function(){ el.removeClass(hasErrorClasses); }, 2000);
+                                validationError = true;
+                                invalidElements.push($(this));
+                            } else {
+                                // passed
+                                el.removeClass(hasErrorClasses);
+                            }
+                        });                        
+                        // Stop if validation errors exist
+                        if (validationError) {
+                            event.preventDefault();
+                            if ($("#apply_data_to_all_modal").is(':visible') && $("#apply_data_to_all_modal").height() > window.innerHeight * 0.9) {
+                                // Show more obvious error message if using the popout, and if the popout is long
+                                alert('There appear to be some problems with the entered data. There may be some missing or incorrect entries. Please check and try again.');
+                                $("#apply_data_to_all_modal").scrollTop(invalidElements[0][0]['parentElement']['offsetTop']);
+                            } else {
+                                $.notify(
+                                    {message:'There appear to be some problems with the entered data. There may be some missing or incorrect entries. Please check and try again.'},
+                                    {type:'danger'}
+                                );
+                            }
+                            return false;
+                        }
+                        // Collect data
+                        let tmpData = collectMultientryData($(this).parent().find("[data-sres-field]"));
+                        // Send
+                        {% if callback_function_name != "" %}
+                            {{ callback_function_name }}(
+                                $(this).parent().attr('data-sres-identifier'), 
+                                JSON.stringify(tmpData), 
+                                {% if mode == 'single' %}$(this).parent(){% else %}$(this).parent().parent(){% endif %}, 
+                                '{{ table.config.uuid }}', 
+                                '{{ column.config.uuid }}'
+                            );
+                        {% endif %}
+                    });
+                    // Geolocation
+                    $(document).ready(function(){
+                        if ("geolocation" in navigator && $("div[data-sres-field=geolocation] input:hidden").length > 0) {
+                            /* geolocation is available and needed */
+                            navigator.geolocation.watchPosition(function(position){
+                                $("div[data-sres-field=geolocation] input:hidden").val(position.coords.latitude + "," + position.coords.longitude);
+                            });
+                        } else {
+                            /* geolocation IS NOT available */
+                        }
+                    });
+                </script>
+            {% endif %}
+        {% endif %}
+    {% elif column.config.type == 'image' %}
+        {% if not load_script_only and readonly == '' %}
+            <div class="sres-addvalue-image-container">
+                <div class="text-center border rounded p-2 mb-2 sres-addvalue-image-saved-image-container" data-sres-identifier="{{ student_identifier }}">
+                    {% if data_to_display %}
+                        <img src="{{ data_to_display }}" style="max-height:100%; max-width:100%;" class="sres-addvalue-image-saved-image">
+                    {% else %}
+                        No image yet {# this is replaced by the img tag upon successful save #}
+                    {% endif %}
+                </div>
+                <button type="button" class="btn btn-primary {{ additional_class }} addvalue_image_capture_{{ column.config.uuid }}" data-sres-identifier="{{ student_identifier }}">
+                    <span class="fa fa-image" aria-hidden="true"></span> Capture or load image
+                </button>
+                <button type="button" class="btn btn-primary sres-addvalue-btn-save sres-addvalue-image-button-save d-none {{ additional_class }}" data-sres-columnuuid="{{ column.config.uuid }}" data-sres-identifier="{{ student_identifier }}">
+                    <span class="fa fa-save" aria-hidden="true"></span> {{ save_button_text }} image
+                </button>
+                <div style="text-align:center; max-width:100%; max-height:100%;" class="d-none border rounded p-2 mt-2 {{ additional_class }}" data-sres-identifier="{{ student_identifier }}">
+                    <canvas class="{{ additional_class }} addvalue_image_canvas_{{ column.config.uuid }}" 
+                        width="{{ column.config.custom_options.datatype_image_max_dimension }}" 
+                        height="{{ column.config.custom_options.datatype_image_max_dimension }}" 
+                        data-sres-identifier="{{ student_identifier }}"></canvas>
+                </div>
+                <div class="d-none">
+                    <input type="file" capture="camera" class="form-control {{ additional_class }} addvalue_image_file_{{ column.config.uuid }}" data-sres-columnuuid="{{ column.config.uuid }}" data-sres-identifier="{{ student_identifier }}"/>
+                </div>
+            </div>
+        {% endif %}
+        {% if load_script or load_script_only %}
+            <script>
+                $("input:file.addvalue_image_file_{{ column.config.uuid }}{{ additional_class_selector }}").on('change', function() {
+                    let identifier = $(this).attr('data-sres-identifier');
+                    $("#addvalue_image_canvas_{{ column.config.uuid }}{{ additional_class_selector }}[data-sres-identifier=" + identifier + "]").parent().removeClass('d-none');
+                    $('canvas.addvalue_image_canvas_{{ column.config.uuid }}[data-sres-identifier=' + identifier + ']').parent().removeClass('d-none');
+                    capture_show_image('input.addvalue_image_file_{{ column.config.uuid }}[data-sres-identifier=' + identifier + ']', 'canvas.addvalue_image_canvas_{{ column.config.uuid }}[data-sres-identifier=' + identifier + ']', '{{ column.config.custom_options.datatype_image_max_dimension }}');
+                    $(this).parent().siblings('.sres-addvalue-image-button-save').removeClass('d-none');
+                });
+                $("button.addvalue_image_capture_{{ column.config.uuid }}{{ additional_class_selector }}").on('click', function() {
+                    let identifier = $(this).attr('data-sres-identifier');
+                    $("input:file.addvalue_image_file_{{ column.config.uuid }}{{ additional_class_selector }}[data-sres-identifier=" + identifier + "]").trigger('click');
+                });
+                $("button[class~='sres-addvalue-image-button-save'][data-sres-columnuuid='{{ column.config.uuid }}']{{ additional_class_selector }}").on('click', function() {
+                    let button = $(this);
+                    let identifier = $(this).attr('data-sres-identifier');
+                    let currentImgContainer = button.parents('.sres-addvalue-image-container').find('.sres-addvalue-image-saved-image-container');
+                    button.addClass('disabled').prop('disabled', true);
+                    let canvas = $("canvas.addvalue_image_canvas_{{ column.config.uuid }}{{ additional_class_selector }}[data-sres-identifier=" + identifier + "]")[0];
+                    $(canvas).parent().addClass('d-none');
+                    button.append('<span class="' + SRES_SAVE_BTN_SAVING_CLASS + '"></span>');
+                    $.ajax({
+                        type: 'POST',
+                        url: ENV['SEND_RICH_DATA_ENDPOINT'],
+                        data: {
+                            c:'{{ column.config.uuid }}',
+                            i:identifier,
+                            d: canvas.toDataURL("image/png"),
+                            t:'image'
+                        }
+                    }).done(function(data){
+                        button.find('.sres-addvalue-btn-save-status').each(function(){ $(this).remove() });
+                        button
+                            .removeClass('disabled')
+                            .prop('disabled', false)
+                            .addClass('d-none');
+                        data = JSON.parse(data);
+                        if (data.success == 'true' || data.success == true) {
+                            {{ callback_function_name }}(
+                                identifier, 
+                                data.data, 
+                                button.parent(), 
+                                '{{ table.config.uuid }}', 
+                                '{{ column.config.uuid }}',
+                                function(identifier, dataToSend, tableuuid, columnuuid, data){
+                                    if (currentImgContainer.find('img').length) {
+                                        currentImgContainer.find('img').attr('src', data.data.url);
+                                    } else {
+                                        currentImgContainer.html('<img src="' + data.data.url + '" style="max-height:100%; max-width:100%;" class="sres-addvalue-image-saved-image">');
+                                    }
+                                }
+                            );
+                        } else {
+                            $.notify({message:'Error saving image'}, {type:'danger'});
+                        }
+                    });
+                });
+            </script>
+        {% endif %}
+    {% elif column.config.type == 'file' %}
+        {% if not load_script_only and readonly == '' %}
+            <div class="sres-input-container" data-sres-column-type="{{ column.config.type }}" data-sres-identifier="{{ student_identifier }}" data-sres-columnuuid="{{ column.config.uuid }}">
+                <input type="hidden" data-sres-field="file" data-sres-identifier="{{ student_identifier }}" 
+                    data-sres-columnuuid="{{ column.config.uuid }}" value="{{ data_to_display|jsondump }}">
+                <div class="input-group mb-2">
+                    <div class="input-group-prepend">
+                        <span class="input-group-text">
+                            {% trans count=column.config.custom_options.datatype_file_multiple_number|int %}
+                                Choose one file
+                            {% pluralize %}
+                                Choose up to {{ count }} files
+                            {% endtrans %}
+                        </label>
+                    </div>
+                    <div class="custom-file">
+                        <input type="file" id="{{ column.config.uuid }}_{{ student_identifier }}"
+                            class="custom-file-input sres-addvalue-file-input"
+                            accept="{{ column.config.custom_options.datatype_file_allowed_extensions }}"
+                            data-sres-file-count-limit="{{ column.config.custom_options.datatype_file_multiple_number }}"
+                            data-sres-file-max-bytes="{{ column.config.custom_options.datatype_file_max_bytes }}"
+                            data-sres-file-allowed-extensions="{{ column.config.custom_options.datatype_file_allowed_extensions }}"
+                            data-sres-identifier="{{ student_identifier }}" data-sres-columnuuid="{{ column.config.uuid }}"
+                            {% if column.config.custom_options.datatype_file_multiple_number|int > 1 %}multiple{% endif %}>
+                        <label class="custom-file-label" for="{{ column.config.uuid }}_{{ student_identifier }}">Choose file(s)</label>
+                    </div>
+                </div>
+                <div class="form-inline mb-2">
+                    <button class="btn btn-primary sres-addvalue-file-upload" type="button">
+                        <span class="d-none sres-addvalue-file-upload-processing"><span class="fa fa-circle-notch spinning"></span></span>
+                        <span class="d-none sres-addvalue-file-upload-success"><span class="fa fa-check"></span></span>
+                        <span class="sres-addvalue-file-upload-button-initial {% if data_to_display %}d-none{% else %}{% endif %}">Upload</span>
+                        <span class="sres-addvalue-file-upload-button-replace {% if data_to_display %}{% else %}d-none{% endif %}">Upload and replace existing file(s)</span>
+                    </button>
+                    <button class="btn btn-primary sres-addvalue-file-upload-additional ml-2 {% if data_to_display %}{% else %}d-none{% endif %}" type="button">
+                        <span class="d-none sres-addvalue-file-upload-processing"><span class="fa fa-circle-notch spinning"></span></span>
+                        <span class="d-none sres-addvalue-file-upload-success"><span class="fa fa-check"></span></span>
+                        Upload as additional file(s)
+                    </button>
+                </div>
+                <div class="mb-2 sres-addvalue-file-existing-list-container d-none">
+                    <ul class="sres-addvalue-file-existing-list">
+                    </ul>
+                </div>
+                <div class="mb-2 sres-addvalue-file-unsaved-notification d-none">
+                    <div class="alert alert-warning">
+                        <span class="fa fa-exclamation-triangle"></span> You need to press 'Save' to save these changes.
+                    </div>
+                </div>
+                <div class="input-group mb-2">
+                    <button type="button" class="btn btn-primary sres-addvalue-btn-save sres-addvalue-file-button-save d-none {{ additional_class }} {% if mode == 'single' %}btn-block{% endif %}" 
+                            data-sres-columnuuid="{{ column.config.uuid }}" data-sres-identifier="{{ student_identifier }}">
+                        <span class="fa fa-save" aria-hidden="true"></span> Save
+                    </button>
+                </div>
+            </div>
+            {% if data_to_display %}
+                <script>
+                    $(document).trigger('sres:updateaddvaluefilelist', {
+                        identifier: '{{ student_identifier }}',
+                        columnUuid: '{{ column.config.uuid }}'
+                    });
+                </script>
+            {% endif %}
+        {% endif %}
+        {% if load_script or load_script_only %}
+            <script>
+                $(document).ready(function(){
+                    bsCustomFileInput.init();
+                });
+            </script>
+            <script>
+                $(document).on('click', "button.sres-addvalue-file-button-save[data-sres-columnuuid='{{ column.config.uuid }}']{{ additional_class_selector }}", function() {
+                    let saveButton = $(this);
+                    let inputContainer = $(this).parents('.sres-input-container');
+                    let hiddenInputField = inputContainer.find('[data-sres-field=file]');
+                    let identifier = $(this).attr('data-sres-identifier');
+                    saveButton.addClass('disabled').prop('disabled', true);
+                    saveButton.append('<span class="' + SRES_SAVE_BTN_SAVING_CLASS + '"></span>');
+                    // Send the data through
+                    {{ callback_function_name }}(
+                        identifier, 
+                        hiddenInputField.val(), 
+                        saveButton.parent(), 
+                        '{{ table.config.uuid }}', 
+                        '{{ column.config.uuid }}'
+                    );
+                    // Hide the 'unsaved' notification
+                    $(document).on('sres:datasaved', function(event, args) {
+                        inputContainer.find('.sres-addvalue-file-unsaved-notification').addClass('d-none');
+                    });
+                    // Re-enable the Save button if there is an error
+                    $(document).on('sres:datasaveerror', function(event, args) {
+                        saveButton.removeClass('disabled').prop('disabled', false);
+                    });
+                    // If user clicks upload again, re-enable the Save button
+                    inputContainer.find('.sres-addvalue-file-upload, .sres-addvalue-file-upload-additional').on('click', function(){
+                        saveButton.removeClass('disabled').prop('disabled', false);
+                    });
+                    // Show the buttons that are meant to appear when files are already present
+                    inputContainer
+                        .find('.sres-addvalue-file-upload-additional').removeClass('d-none').end()
+                        .find('.sres-addvalue-file-upload sres-addvalue-file-upload-button-initial').addClass('d-none').end()
+                        .find('.sres-addvalue-file-upload sres-addvalue-file-upload-button-replace').removeClass('d-none');
+                });
+            </script>
+        {% endif %}
+    {% elif column.config.type == 'counter' %}
+        {% if not load_script_only and readonly == '' %}
+            <div class="sres-input-container {{ additional_class }}" data-sres-column-type="{{ column.config.type }}" data-sres-identifier="{{ student_identifier }}" data-sres-columnuuid="{{ column.config.uuid }}">
+                <div class="input-group mb-3">
+                    <div class="input-group-prepend">
+                        <button class="btn btn-outline-primary sres-addvalue-counter-step sres-addvalue-counter-minus {{ additional_class }}" 
+                            data-sres-identifier="{{ student_identifier }}" data-sres-columnuuid="{{ column.config.uuid }}"
+                            type="button">
+                            <span class="fa fa-minus" aria-label="Minus"></span>
+                        </button>
+                    </div>
+                    <input type="number" data-sres-field="regex" class="form-control sres-addvalue-counter-count {{ additional_class }}" value="{{ data_to_display }}" data-sres-increment="{{ column.config.counter.increment }}" readonly>
+                    <div class="input-group-append">
+                        <button class="btn btn-outline-primary sres-addvalue-counter-step sres-addvalue-counter-plus {{ additional_class }}" 
+                            data-sres-identifier="{{ student_identifier }}" data-sres-columnuuid="{{ column.config.uuid }}"
+                            type="button">
+                            <span class="fa fa-plus" aria-label="Plus"></span>
+                        </button>
+                        <span class="input-group-text bg-warning d-none sres-addvalue-counter-warning">
+                            <span class="fa fa-exclamation-triangle"></span>&nbsp;Over limit
+                        </span>
+                        <span class="input-group-text sres-addvalue-counter-limit" data-sres-addvalue-counter-limit="{{ column.config.counter.max }}">Limit: {{ column.config.counter.max }}</span>
+                    </div>
+                </div>            
+            </div>
+        {% endif %}
+        {% if mode == 'single' and entry_mode == 'single' and not do_not_trigger %}
+            <script>
+                $(document).ready(function(){
+                    // trigger plus
+                    $(".sres-addvalue-counter-step.sres-addvalue-counter-plus").trigger("click");
+                });
+            </script>
+        {% endif %}
+        {% if load_script or load_script_only %}
+            <script>
+                $(document).on('click', "button[class~='sres-addvalue-counter-step'][data-sres-identifier][data-sres-columnuuid='{{ column.config.uuid }}']{{ additional_class_selector }}", function(){
+                    var identifier = $(this).attr('data-sres-identifier');
+                    var maxValue = $(".sres-input-container[data-sres-columnuuid='{{ column.config.uuid }}'][data-sres-identifier='" + identifier + "']{{ additional_class_selector }} .sres-addvalue-counter-limit").attr("data-sres-addvalue-counter-limit");
+                    maxValue = parseInt(maxValue);
+                    var step = $(".sres-input-container[data-sres-columnuuid='{{ column.config.uuid }}'][data-sres-identifier='" + identifier + "']{{ additional_class_selector }} .sres-addvalue-counter-count").attr("data-sres-increment");
+                    //console.log(maxValue, step);
+                    if ($(this).hasClass('sres-addvalue-counter-minus')) {
+                        step = -parseInt(step);
+                    } else if ($(this).hasClass('sres-addvalue-counter-plus')) {
+                        step = parseInt(step);
+                    } else {
+                        return;
+                    }
+                    $counter = $(".sres-input-container[data-sres-columnuuid='{{ column.config.uuid }}'][data-sres-identifier='" + identifier + "']{{ additional_class_selector }} .sres-addvalue-counter-count");
+                    var existingValue = parseInt($counter.val()) ? parseInt($counter.val()) : 0;
+                    var newValue = existingValue + step;
+                    var dataToSend = newValue;
+                    // Draw updates
+                    $counter.val( newValue );
+                    $overLimitNotice = $(".sres-input-container[data-sres-columnuuid='{{ column.config.uuid }}'][data-sres-identifier='" + identifier + "']{{ additional_class_selector }} .sres-addvalue-counter-warning");
+                    if (newValue > maxValue) {
+                        $overLimitNotice.removeClass('d-none');
+                    } else {
+                        $overLimitNotice.addClass('d-none');
+                    }
+                    // Send data
+                    {% if callback_function_name %}
+                        {{ callback_function_name }}(
+                            identifier, 
+                            dataToSend, 
+                            $(this).parents('.sres-input-container'), 
+                            '{{ table.config.uuid }}', 
+                            '{{ column.config.uuid }}'
+                        );
+                    {% endif %}
+                });
+            </script>
+        {% endif %}
+    {% elif column.config.type == 'toggle' %}
+        {% if not load_script_only and readonly == '' %}
+            <div class="sres-input-container" data-sres-column-type="{{ column.config.type }}" data-sres-identifier="{{ student_identifier }}" data-sres-columnuuid="{{ column.config.uuid }}">
+            </div>
+        {% endif %}
+        {% if load_script or load_script_only %}
+            <script>
+            </script>
+        {% endif %}
+    {% endif %}
+    
+{% endmacro %}

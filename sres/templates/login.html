@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block title %}
+    Please log in
+{% endblock %}
+
+{% block body %}
+    <div class="row mt-2">
+        <div class="col-sm-12">
+            <h4>Please log in</h4>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-sm-12">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+        </div>
+        <div class="col-sm-12 mb-3">
+            <div class="card">
+                <div class="card-body">
+                    <form method="post" data-ajax="false">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="form-group">
+                            <input type="text" class="form-control" name="loginUsername" id="loginUsername" placeholder="{{ _('Unikey username') }}" autocomplete="off" autofocus value="{{ request.form.loginUsername }}" autocapitalize="none" />
+                        </div>
+                        <div class="form-group">
+                            <input type="password" class="form-control" name="loginPassword" id="loginPassword" placeholder="{{ _('Unikey password') }}"/>
+                        </div>
+                        <div class="form-group mb-0">
+                            <input type="submit" value="Log in" id="login_button" class="btn btn-primary" />
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% if vars.saml2_enabled %}
+            <div class="col-sm-12 mb-3">
+                <div class="card">
+                    <div class="card-body">
+                        <a href="{{ vars.saml2_url }}" class="btn btn-primary">
+                            {{ _('Log in using Single Sign On') }}
+                        </a>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

@@ -1,0 +1,237 @@
+{% extends 'base-staff.html' %}
+
+{% set table_uuid = table.config.uuid %}
+
+{% block title %}
+    {% if vars.mode == 'new' %}New list{% elif vars.mode == 'edit' %}Edit list - {{ table.config.code }}{% endif %}
+{% endblock %}
+
+{% block head_css2 %}
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.table-edit.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/papaparse.min.js') }}"></script>
+    {% raw %}
+        <script id="populate_student_list_mapper_option" type="text/x-handlebars-template">
+            <option value="{{fieldName}}" {{#if optionSelected}}selected="selected"{{/if}}>{{fieldName}}</option>
+        </script>
+    {% endraw %}
+    <script>
+        var autoListFieldsToMap = {{ vars.AUTOLIST_MAPPINGS|tojson }};
+        ENV['table_uuid'] = "{{ table.config.uuid }}";
+        ENV['FIND_TABLE_ENDPOINT'] = "{{ url_for('table.find_tables', requestor=request.endpoint) }}";
+        ENV['VIEW_TABLE_ENDPOINT'] = "{{ url_for('table.view_table', table_uuid='__table_uuid__') }}";
+    </script>
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <main>
+    
+    <div class="row">
+        <div class="col">
+            <h1>
+                {% if vars.mode == 'edit' %}
+                    Edit list: {{ table.config.code }} {{ table.config.name }} ({{ table.config.year }} semester {{ table.config.semester }})
+                {% elif vars.mode == 'new' %}
+                    Create new list
+                {% endif %}
+            </h1>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col">
+            <form name="editStudentList" id="editStudentList" method="post" action="{{ url_for('table.edit_table', table_uuid=table.config.uuid) }}" enctype="multipart/form-data">
+			<input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+			<div class="form-group row">
+				<label class="col-sm-2 col-form-label sres-form-label" for="uoscode">{{ _('Unit of study code') }}</label>
+                <div class="col-sm-10">
+					<input type="text" name="uoscode" id="uoscode" value="{{ request.form.uoscode or table.config.code }}" class="form-control" required />
+				</div>
+			</div>
+			<div class="form-group row">
+				<label class="col-sm-2 col-form-label sres-form-label" for="uosname">{{ _('Unit of study name') }}</label>
+				<div class="col-sm-10">
+					<input type="text" id="uosname" name="uosname" value="{{ request.form.uosname or table.config.name }}" class="form-control" required />
+				</div>
+			</div>
+			<div class="form-group row">
+				<label class="col-sm-2 col-form-label sres-form-label" for="theyear">Calendar year</label>
+				<div class="col-sm-10">
+					<input type="number" name="theyear" id="theyear" value="{{ request.form.theyear or table.config.year }}" class="form-control" required />
+				</div>
+			</div>
+			<div class="form-group row">
+				<label class="col-sm-2 col-form-label sres-form-label" for="thesemester">{{ _('Semester') }}</label>
+				<div class="col-sm-10">
+					<input type="text" name="thesemester" id="thesemester" value="{{ request.form.thesemester or table.config.semester }}" class="form-control" required />
+				</div>
+			</div>
+			<div class="form-group row">
+				<label class="col-sm-2 col-form-label sres-form-label">Staff contact</label>
+				<div class="col-sm-10">
+                    <div class="row">
+                        <div class="col">
+                            <label for="staffEmailName">Name</label>
+                            <input type="text" id="staffEmailName" name="staffEmailName" value="{{ request.form.staffEmailName or table.config.contact.name }}" class="form-control" required />
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col">
+                        <label for="staffEmailAddress">Email address</label>
+                        <input type="text" id="staffEmailAddress" name="staffEmailAddress" value="{{ request.form.staffEmailAddress or table.config.contact.email }}" class="form-control" required />
+                        </div>
+                    </div>
+				</div>
+			</div>
+            {% import 'select-users.html' as select_users %}
+			<div class="form-group row" id="panel_authorised_users">
+				<label class="col-sm-2 col-form-label sres-form-label">Authorised staff</label>
+				<div class="col-sm-10">
+                    {% for user_role in vars.user_roles %}
+						<div class="row">
+							<div class="col-sm-12">
+								<label for="authorised_{{ user_role['display'] }}#s">
+									{{ user_role['display'] }}s 
+								</label>
+							</div>
+						</div>
+						<div class="row">
+                            {{ select_users.select_user_fields(
+                                    user_role['name'], usernames=request.form['authorised_{}s'.format(user_role['name'])] or table.get_authorised_usernames()[user_role['name'] + 's']
+                                )
+                            }}
+						</div>
+                        <br>
+					{% endfor %}
+				</div>
+			</div>
+			<div class="form-group row">
+				<label class="col-sm-2 col-form-label sres-form-label" for="populate_student_list_from">
+					{% if vars.mode == 'new' %}
+						Populate enrollments from
+					{% elif vars.mode == 'edit' %}
+						Re-populate enrollments
+						<input type="checkbox" name="chkRepopulate" id="chkRepopulate" data-on="Yes" data-off="No" data-toggle="toggle">
+					{% endif %}
+				</label>
+				<div class="col-sm-10" id="populate_student_list_from_container">
+					<!-- the method selector -->
+					<select id="populate_student_list_from" name="populate_student_list_from" class="form-control">
+						<option value="autoList" {% if vars.DEFAULT_POPULATE_FROM_OPTION == 'autoList' %}selected{% endif %}>Custom CSV (comma-separated) or TAB (tab-separated) file</option>
+						<option value="none" {% if vars.DEFAULT_POPULATE_FROM_OPTION == 'none' %}selected{% endif %}>Nothing for now - populate list later</option>
+					</select>
+					<!--- configuration for each method --->
+					<div class="autoList card">
+                        <div class="card-body">
+                            <label for="autoListFiles">1. Select a file</label>
+                            <input type="file" id="autoListFiles" name="autoListFiles" class="form-control-file">
+                            {% if vars.mode == 'edit' %}
+                                <br>
+                                <div class="form-check">
+                                    <input type="checkbox" name="chkRemoveNonExistantStudents" id="removeNonExistantStudents" checked class="form-check-input">
+                                    <label for="removeNonExistantStudents" class="form-check-label">Remove student enrollments from existing list if they are not found in the uploaded file</label>
+                                </div>
+                            {% endif %}
+                            <br>
+                            <label>2. Then map its headers</label>
+                            <button type="button" class="btn btn-primary" id="autoListPreProcess"><span class="fa fa-check d-none" aria-hidden="true"></span> Set up header mapping</button>
+                            <input type="hidden" id="autoList_mapping_map" name="autoList_mapping_map" value="" />
+                        </div>
+					</div>
+					<div class="modal fade" id="modal_autoList_mapping" tabindex="-1" role="dialog" data-backdrop="static">
+						<div class="modal-dialog modal-lg" role="document">
+							<div class="modal-content">
+								<div class="modal-header">
+									<h4 class="modal-title">Map input column headers</h4>
+								</div>
+								<div class="modal-body">
+									<div class="container-fluid">
+										<div class="row">
+											<p>Match the column headers in the input file to the details needed. We have tried to guess the right headers.</p>
+										</div>
+										<div class="row">
+											<p>Filename: <label id="modal_autoList_mapping_filename"></label></p>
+										</div>
+										<div id="modal_autoList_mapping_map">
+                                            {% for element in vars.AUTOLIST_MAPPINGS %}
+                                                <div class="row mt-2">
+                                                    <div class="col">
+                                                        <label for="modal_autoList_mapping_map_{{ element.name }}">{{ element.display }}</label>
+                                                        {% if element.required %}<span class="badge badge-primary">Required</span>{% endif %}
+                                                        {% if element.hint %}<span class="text-muted">{{ element.hint }}</span>{% endif %}
+                                                        <select id="modal_autoList_mapping_map_{{ element.name }}" class="form-control"></select>
+                                                        {% if element.show_secondary_field %}
+                                                            <label for="modal_autoList_mapping_map_{{ element.name }}_secondary" class="text-muted mt-1">Secondary field for {{ element.display }}, used when the above field is empty</label>
+                                                            <select id="modal_autoList_mapping_map_{{ element.name }}_secondary" class="form-control" data-sres-secondary-field="{{ element.name }}"></select>
+                                                        {% endif %}
+                                                    </div>
+                                                </div>
+                                            {% endfor %}
+										</div>
+									</div>
+								</div>
+								<div class="modal-footer">
+									<button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+									<button type="button" class="btn btn-primary" id="modal_autoList_mapping_confirm">Confirm</button>
+								</div>
+							</div><!-- /.modal-content -->
+						</div><!-- /.modal-dialog -->
+					</div><!-- /.modal -->
+				</div>
+			</div>
+            <div class="form-group row">
+                <div class="col">
+                    <input type="submit" id="submitButton" value="Save" class="btn btn-primary"/>
+                    <input type="hidden" name="action" value="{{ vars.mode }}" />
+                </div>
+            </div>
+            </form>
+        </div>
+    </div>
+    
+    </main>
+
+    {{ select_users.find_user() }}
+    {{ select_users.bulk_edit_users() }}
+    
+<!--- duplicate list warning --->
+<div class="modal fade" id="modal_duplicate_list_warning" tabindex="-1" role="dialog">
+	<div class="modal-dialog" role="document">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h4 class="modal-title" id="myModalLabel">The same or similar student list may already exist!</h4>
+			</div>
+			<div class="modal-body">
+				<div>
+					We found other lists in the system that may be duplicates of the list you are currently working on.
+					If you need to refresh the student list, edit an existing list instead of creating a new one.
+				</div>
+				<br />
+				<div id="modal_duplicate_list_warning_list">
+				</div>
+			</div>
+			<div class="modal-footer">
+				<button type="button" class="btn btn-default" data-dismiss="modal">Thanks for letting me know</button>
+			</div>
+		</div>
+	</div>
+</div>
+{% endblock %}

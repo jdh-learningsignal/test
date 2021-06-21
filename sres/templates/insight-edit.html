@@ -1,0 +1,449 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+    {% if vars.mode == 'new' %}New insight{% elif vars.mode == 'edit' %}Edit insight - {{ insight.config.name }}{% endif %}
+{% endblock %}
+
+{% block head_css2 %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/query-builder.default.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/jquery.multi-select.css') }}">
+    <style>
+        #conditions_advanced_expression, #conditions_advanced_expression_friendly {
+            padding: 0.5rem;
+        }
+        .sres-multientry-label {
+            padding: 0.5rem;
+        }
+        .sres-tinymce-editor {
+            padding: 0.5rem;
+        }
+        .rule-filter-container {
+            width: 100%;
+        }
+        .rule-operator-container {
+            width: 25%;
+        }
+    </style>
+    <style>
+        .algolia-autocomplete {
+            width: 100%;
+        }
+        .algolia-autocomplete .aa-input, .algolia-autocomplete .aa-hint {
+            width: 100%;
+        }
+        .algolia-autocomplete .aa-hint {
+            color: #999;
+        }
+        .algolia-autocomplete .aa-dropdown-menu {
+        width: 100%;
+        background-color: #fff;
+        border: 1px solid #999;
+        border-top: none;
+        }
+        .algolia-autocomplete .aa-dropdown-menu .aa-suggestion {
+        cursor: pointer;
+        padding: 5px 4px;
+        }
+        .algolia-autocomplete .aa-dropdown-menu .aa-suggestion.aa-cursor {
+        background-color: #B2D7FF;
+        }
+        .algolia-autocomplete .aa-dropdown-menu .aa-suggestion em {
+        font-weight: bold;
+        font-style: normal;
+        }
+    </style>
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/autocomplete.jquery.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jquery-ui.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tinymce/tinymce.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tinymce/jquery.tinymce.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jquery.multi-select.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jquery.quicksearch.js') }}"></script>
+    <script>
+        var queryBuilderFilters = {{ vars.query_builder_filters|tojson }};
+        $(document).ready(function(){
+            listChooserUpdateSelection({{ vars.referenced_table_uuids|tojson }});
+        });
+    </script>
+    <script src="{{ url_for('static', filename='js/query-builder.standalone.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.query-builder-base.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.insight-edit.js') }}"></script>
+{% endblock %}
+
+{% block body %}
+    
+    {% import 'select-users.html' as select_users %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <main>
+    
+    <div class="row">
+        <div class="col">
+            <h1>
+                {% if vars.mode == 'edit' %}
+                    Edit insight {{ insight.config.name }}
+                {% elif vars.mode == 'new' %}
+                    Create new insight
+                {% endif %}
+            </h1>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col">
+            <form method="post" action="{{ url_for('insight.edit_insight', insight_uuid=insight.config.uuid) }}" enctype="multipart/form-data" class="sres-alert-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label" for="insight_name">Insight name</label>
+                    <div class="col-sm-10">
+                        <input type="text" name="insight_name" id="insight_name" value="{{ request.form.insight_name or insight.config.name }}" required class="form-control" data-sres-required>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label" for="insight_description">Insight description</label>
+                    <div class="col-sm-10">
+                        <input type="text" name="insight_description" id="insight_description" value="{{ request.form.insight_description or insight.config.description }}" class="form-control">
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Authorised administrators</label>
+                    <div class="col-sm-10">
+                        <div class="row">
+                            {{ select_users.select_user_fields(
+                                    id='administrator', 
+                                    usernames=request.form['authorised_administrators'] or insight.get_authorised_usernames()
+                                )
+                            }}
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Delivery frequency of insight alert</label>
+                    <div class="col-sm-10 form-inline">
+                        Every
+                        <input type="number" class="m-1 form-control" id="alert_frequency" name="alert_frequency" value="{{ insight.config.alert_frequency }}" size="4" min="0.5" step="0.5" max="24" aria-label="Delivery frequency interval">
+                        <select name="alert_interval" id="alert_interval" class="m-1 form-control" aria-label="Delivery frequency interval type">
+                            {% for interval in ['hours','week'] %}
+                                <option value="{{ interval }}" {% if insight.config.alert_config.alert_interval == interval %}selected{% endif %}>{{ interval }}</option>
+                            {% endfor %}
+                        </select>
+                        , starting on
+                        <input type="date" class="m-1 form-control" name="alert_startfrom" aria-label="Insight alerts to start from date" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" placeholder="yyyy-mm-dd" value="{{ (request.form.alert_startfrom or insight.config.alert_startfrom)|datetime }}">
+                        at
+                        <input type="time" class="m-1 form-control" name="alert_starttime" aria-label="Insight alerts to start from time" pattern="[0-9]{2}:[0-9]{2}" placeholder="HH:MM" value="{{ (request.form.alert_starttime or insight.config.alert_config.alert_starttime)|datetime('hm') }}">
+                        and ending on
+                        <input type="date" class="m-1 form-control" name="alert_endby" aria-label="Insight alerts to end on date" pattern="[0-9]{4}-[0-9]{2}-[0-9]{2}" placeholder="yyyy-mm-dd" value="{{ (request.form.alert_endby or insight.config.alert_endby)|datetime }}">
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Insight alert recipient(s)</label>
+                    <div class="col-sm-10">
+                        <div class="form-horizontal">
+                            <label for="alert_recipient_emails">Email address(es)</label>
+                            <span class="text-muted">Separate multiple email addresses with semicolons</span>
+                            <input type="text" class="form-control" id="alert_recipient_emails" name="alert_recipient_emails" value="{{ request.form.alert_recipient_emails or insight.config.alert_config.recipient_emails }}">
+                        </div>
+                        <div class="form-inline mt-3">
+                            <label>and according to teacher allocation defined in</label>
+                            <input type="hidden" id="alert_teacher_allocation_columnuuid" name="alert_teacher_allocation_columnuuid" 
+                                data-sres-tableuuid="{% if vars.teacher_allocation_column._id %}{{ vars.teacher_allocation_column.table.config.uuid }}{% endif %}"
+                                value="{% if vars.teacher_allocation_column._id %}{{ vars.teacher_allocation_column.config.uuid }}{% endif %}"
+                                class="sres-condition-column-receiver sres-column-rereferenceable sres-column-rereferenceable-chooser">
+                            <span id="alert_teacher_allocation_columnuuid" class="ml-2 sres-condition-column-placeholder">
+                                {% if vars.teacher_allocation_column._id %}
+                                    {{ vars.teacher_allocation_column.get_friendly_name() }}
+                                {% else %}
+                                    Pick a column
+                                {% endif %}
+                            </span>
+                            <span class="sres-condition-column-remove"><span class="fa fa-times"></span></span>
+                            <span class="ml-2 text-muted"><em>This is an optional setting</em></span>
+                        </div>
+                        <div class="form-inline mt-3">
+                            <label for="alert_when_no_students_identified">If no students are found to meet the trigger conditions:</label>
+                            <select name="alert_when_no_students_identified" id="alert_when_no_students_identified" class="form-control ml-2">
+                                <option value="send">send alert anyway (default)</option>
+                                <option value="nosend" {% if (request.form.alert_when_no_students_identified or insight.config.alert_config.when_no_students_identified) == 'nosend' %}selected{% endif %}>do not send an alert</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Grouping</label>
+                    <div class="col-sm-10">
+                        <label>Group students according to</label>
+                        <input type="hidden" id="alert_grouping_columnuuid" name="alert_grouping_columnuuid" 
+                                data-sres-tableuuid="{% if vars.grouping_column._id %}{{ vars.grouping_column.table.config.uuid }}{% endif %}"
+                                value="{% if vars.grouping_column._id %}{{ vars.grouping_column.config.uuid }}{% endif %}"
+                            class="sres-condition-column-receiver sres-column-rereferenceable sres-column-rereferenceable-chooser">
+                        <span id="alert_grouping_columnuuid_placeholder" class="sres-condition-column-placeholder">
+                            {% if vars.grouping_column._id %}
+                                {{ vars.grouping_column.get_friendly_name() }}
+                            {% else %}
+                                Pick a column
+                            {% endif %}
+                        </span>
+                        <span class="sres-condition-column-remove"><span class="fa fa-times"></span></span>
+                        <span class="text-muted"><em>This is an optional setting</em></span>
+                   </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Triggers for insight alert</label>
+                    <div class="col-sm-10">
+                        <label for="trigger_type" class="sres-form-label">Select a trigger</label>
+                        <select name="trigger_type" id="trigger_type" class="form-control" data-sres-value="{{ request.form.trigger_type or insight.config.trigger_config.trigger_type }}">
+                            <option value="">Select a trigger</option>
+                            <option value="quartiles">Students belonging to particular quartiles</option>
+                            <option value="matching">Students with records corresponding to a specified pattern</option>
+                            <option value="trending">Students trending in a particular direction</option>
+                            <option value="distance_from_average">Students compared to average</option>
+                            <option value="ml_outliers">Automatic detection of outlying/anomalous student data</option>
+                            <!---option value="custom_conditions">Set up custom conditions</option--->
+                        </select>
+                        <br />
+                        <div class="panel panel-default d-none col-sm-12" id="trigger_type_config_custom_conditions">
+                            <div class="panel-body">
+                                {# TODO #}
+                            </div>
+                        </div>
+                        <div class="row d-none" id="trigger_type_config_predefined">
+                            <div class="col-sm-12">
+                                <label class="sres-form-label">Configure trigger</label>
+                                <div class="d-none" id="trigger_type_config_quartiles">
+                                    <div class="form-inline">
+                                        Find students who are in the
+                                        <select name="trigger_config_quartiles_range" class="m-2 form-control">
+                                            {% for option in vars.form_options.trigger_config_quartiles_range %}
+                                                <option value="{{ option.value }}" {% if insight.config.trigger_config.trigger_config_quartiles_range == option.value %}selected{% endif %}>{{ option.display }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        quartile(s) for
+                                        <select name="trigger_config_quartiles_combiner" class="m-2 form-control">
+                                            {% for option in vars.form_options.trigger_config_quartiles_combiner %}
+                                                <option value="{{ option.value }}" {% if insight.config.trigger_config.trigger_config_quartiles_combiner == option.value %}selected{% endif %}>{{ option.display }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        of the selected column(s).
+                                    </div>
+                                </div>
+                                <div class="d-none" id="trigger_type_config_matching">
+                                    <div class="form-inline">
+                                        Find students where data in
+                                        <select name="trigger_config_matching_count_comparator" class="m-2 form-control">
+                                            {% for option in vars.form_options.trigger_config_matching_count_comparator %}
+                                                <option value="{{ option.value }}" {% if insight.config.trigger_config.trigger_config_matching_count_comparator == option.value %}selected{% endif %}>{{ option.display }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <input type="number" name="trigger_config_matching_count" class="m-2 form-control" placeholder="how many?" value="{{ (request.form.trigger_config_matching_count or insight.config.trigger_config.trigger_config_matching_count) }}">
+                                        of the selected column(s)
+                                        <select name="trigger_config_matching_method" class="m-2 form-control">
+                                            {% for option in vars.form_options.trigger_config_matching_method %}
+                                                <option value="{{ option.value }}" {% if insight.config.trigger_config.trigger_config_matching_method == option.value %}selected{% endif %}>{{ option.display }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="form-horizontal">
+                                        <input type="text" name="trigger_config_matching_value" class="form-control" placeholder="some value" value="{{ (request.form.trigger_config_matching_value or insight.config.trigger_config.trigger_config_matching_value) }}">
+                                    </div>
+                                </div>
+                                <div class="d-none" id="trigger_type_config_trending">
+                                    <div class="form-inline">
+                                        Find students where their data trends
+                                        <select name="trigger_config_trending_direction" class="m-2 form-control">
+                                            {% for option in vars.form_options.trigger_config_trending_direction %}
+                                                <option value="{{ option.value }}" {% if insight.config.trigger_config.trigger_config_trending_direction == option.value %}selected{% endif %}>{{ option.display }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        in the selected columns (order of columns is important).
+                                        Optional data conversion:
+                                        <select name="trigger_config_trending_data_conversion" class="m-2 form-control">
+                                            {% for option in vars.form_options.trigger_config_trending_data_conversion %}
+                                                <option value="{{ option.value }}" {% if insight.config.trigger_config.trigger_config_trending_data_conversion == option.value %}selected{% endif %}>{{ option.display }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="d-none" id="trigger_type_config_distance_from_average">
+                                    <div class="form-inline">
+                                        Find students where data is
+                                        <select name="trigger_config_distance_direction" class="m-2 form-control">
+                                            {% for option in vars.form_options.trigger_config_distance_direction %}
+                                                <option value="{{ option.value }}" {% if insight.config.trigger_config.trigger_config_distance_direction == option.value %}selected{% endif %}>{{ option.display }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        the column average by
+                                        <input type="text" name="trigger_config_distance_value" class="m-2 form-control" value="{{ (request.form.trigger_config_distance_value or insight.config.trigger_config.trigger_config_distance_value) }}" placeholder="numerical value">
+                                        in
+                                        <select name="trigger_config_distance_combiner" class="m-2 form-control">
+                                            {% for option in vars.form_options.trigger_config_distance_combiner %}
+                                                <option value="{{ option.value }}" {% if insight.config.trigger_config.trigger_config_distance_combiner == option.value %}selected{% endif %}>{{ option.display }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        of the selected column(s).
+                                    </div>
+                                </div>
+                                <div class="d-none" id="trigger_type_config_ml_outliers">
+                                    <div class="form-inline">
+                                        <div class="alert alert-warning">
+                                            This trigger is still under development.
+                                        </div>
+                                        Automatically detect outliers/anomalies based on the selected column(s).
+                                        All data must be numeric.
+                                        For non-numerical data:
+                                        <select name="trigger_config_ml_outliers_data_conversion_non_numerical" class="m-2 form-control">
+                                            {% for option in vars.form_options.trigger_config_ml_outliers_data_conversion_non_numerical %}
+                                                <option value="{{ option.value }}" {% if insight.config.trigger_config.trigger_config_ml_outliers_data_conversion_non_numerical == option.value %}selected{% endif %}>{{ option.display }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        For numerical data, blanks are automatically converted to 0 (zero).
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-sm-12 mt-3">
+                                <label class="sres-form-label">Select column(s) to consider</label>
+                                <div class="d-none" id="trigger_type_config_select_columns">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary sres-list-chooser-show-chooser mb-2" {{ vars.filter_disabled }}>
+                                        <span class="fa fa-table"></span> Choose list(s) from which to select column(s)
+                                    </button>
+                                    <div class="form-inline">
+                                        <select id="trigger_config_select_columns_select" multiple="multiple" class="sres-column-rereferenceable sres-column-rereferenceable-multiselect sres-multiselect-dynamic-column-receiver" required>
+                                            {% for table_instance in vars.referenced_tables_instances %}
+                                                {% for column_to_show in table_instance.get_select_array(show_collapsed_multientry_option=true) %}
+                                                    <option value="{{ column_to_show.value }}">{{ column_to_show.full_display_text}}</option>
+                                                {% endfor %}
+                                            {% endfor %}
+                                        </select>
+                                        <input type="hidden" name="trigger_config_select_columns" value="{{ request.form.trigger_config_select_columns or insight.config.trigger_config.trigger_config_select_columns }}">
+                                    </div>
+                                    <div class="form-inline mt-3">
+                                        <label>Ignore column(s) if</label>
+                                        <select name="trigger_config_columns_ignore_state" class="form-control">
+                                            {% for option in vars.form_options.trigger_config_columns_ignore_state %}
+                                                <option value="{{ option.value }}" {% if (request.form.trigger_config_columns_ignore_state or insight.config.trigger_config.trigger_config_columns_ignore_state) == option.value %}selected{% endif %}>{{ option.display }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Content of insight alert</label>
+                    <div class="col-sm-10">
+                        <div class="form-group row">
+                            <label class="col-sm-2" for="content_email_from_name">Sent from name</label>
+                            <div class="col-sm-10">
+                                <input type="text" class="form-control" id="content_email_from_name" name="content_email_from_name" value="{{ (request.form.content_email_from_name or insight.config.content_email_from_name) }}" />
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <label class="col-sm-2" for="content_email_from_address">Sent from email address</label>
+                            <div class="col-sm-10">
+                                <input type="email" class="form-control" id="content_email_from_address" name="content_email_from_address" value="{{ (request.form.content_email_from_address or insight.config.content_email_from_address) }}" />
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <label class="col-sm-2" for="content_email_subject">Email subject</label>
+                            <div class="col-sm-10">
+                                <input type="text" class="form-control" id="content_email_subject" name="content_email_subject" value="{{ (request.form.content_email_subject or insight.config.content_email_subject) }}" />
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <label class="col-sm-2" for="content_email_first">Email first section</label>
+                            <div class="col-sm-10">
+                                <div class="sres-tinymce-editor tinymce-basic border rounded" id="content_email_first">{{ (request.form.content_email_first or insight.config.content_email_first)|safe_no_script }}</div>
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <label class="col-sm-2">Data summaries</label>
+                            <div class="col-sm-10">
+                                <p><label><input type="checkbox" name="content_config_summary_logic" {% if (request.form.content_config_summary_logic or insight.config.content_config.content_config_summary_logic) %}checked{% endif %}> Trigger logic</label></p>
+                                <p><label><input type="checkbox" name="content_config_summary_totals" {% if (request.form.content_config_summary_totals or insight.config.content_config.content_config_summary_totals) %}checked{% endif %}> Totals/counts</label></p>
+                                <!---p><label><input type="checkbox"> Graphs</label></p--->
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <label class="col-sm-2" for="content_per_student">Information to show for each identified student</label>
+                            <div class="col-sm-10">
+                                <div class="sres-tinymce-editor tinymce-basic border rounded sres-column-rereferenceable sres-column-rereferenceable-html" id="content_per_student">{{ (request.form.content_per_student or insight.config.content_per_student)|safe_no_script }}</div>
+                                <button type="button" class="sres-editor-insert-data-field btn btn-light btn-sm sres-disable-upon-translate-column-references">
+                                    <span class="fa fa-dollar-sign" aria-hidden="true"></span> Insert column reference
+                                </button>
+                                <button type="button" class="btn btn-sm btn-light sres-translate-column-references" data-sres-current-mode="design" data-sres-uuid="<cfoutput>abc</cfoutput>">Show friendly column names</button>
+                            </div>
+                        </div>
+                        <div class="form-group row">
+                            <label class="col-sm-2" for="content_email_last">Email last section</label>
+                            <div class="col-sm-10">
+                                <div class="sres-tinymce-editor tinymce-basic border rounded" id="content_email_last">{{ (request.form.content_email_last or insight.config.content_email_last)|safe_no_script }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col">
+                        <input type="hidden" name="action" value="{{ vars.mode }}">
+                        <input type="submit" name="submit_button" value="Save" class="btn btn-primary">
+                        {% if vars.mode == 'edit' %}
+                            <a href="{{ url_for('insight.preview_insight', insight_uuid=insight.config.uuid) }}" class="btn btn-outline-primary" role="button">Preview without saving</a>
+                            <a href="{{ url_for('insight.preview_insight', insight_uuid=insight.config.uuid, run=1)|safe }}" class="btn btn-outline-primary" role="button">Run without saving</a>
+                            {# TODO #}
+                            <!--button type="button" class="btn btn-light sres-column-rereferencer-show">
+                                <span class="fa fa-random" aria-hidden="true"></span> Re-reference columns
+                            </button-->
+                        {% endif %}
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    </main>
+    
+    {% import 'select-column.html' as select_column %}
+    {{ select_column.column_chooser(
+        available_tables=vars.authorised_tables,
+        student_info_items=vars.SYSTEM_COLUMNS
+    ) }}
+    
+    {{ select_users.find_user() }}
+    {{ select_users.bulk_edit_users() }}
+    
+    <!-- modal for delete insight -->
+    <div class="modal fade" id="confirm_delete" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h4 class="modal-title">Are you sure?</h4>
+                </div>
+                <div class="modal-body">
+                    <span class="fa fa-alert" aria-hidden="true"></span>
+                    Warning: all data currently in this insight will be <strong>lost permanently</strong> if you proceed.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-dismiss="modal">Do not delete</button>
+                    <button type="button" id="deleteButton" class="btn btn-danger" data-sres-action="{{ url_for('insight.delete_insight', insight_uuid=insight.config.uuid) }}">Confirm delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    
+{% endblock %}

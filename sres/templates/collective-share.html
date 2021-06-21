@@ -1,0 +1,306 @@
+{% macro show_title(mode, asset_type, asset_name) %}
+    {% if mode == 'share' %}
+        Share {{ asset_type }} {{ asset_name }} to the SRES Collective
+    {% elif mode == 'show' %}
+        Shared {{ asset_type }} {{ asset_name }} in the SRES Collective
+    {% endif %}
+{% endmacro %}
+
+{% macro render_collective_metadata_fields(collective_asset, select_users, collective_sharing_mode, asset_type, vars) %}
+    {% import 'collective-preview.html' as collective_preview %}
+    <input type="hidden" name="collective_asset_uuid" value="{% if collective_asset.config.uuid %}{{ collective_asset.config.uuid }}{% endif %}">
+    <div class="row mt-2 mb-3">
+        <div class="col">
+            <div class="border rounded border-primary p-3">
+                <div class="row mb-2">
+                    <div class="col">
+                        <h3>
+                            <span class="fa fa-share-alt"></span>
+                            Sharing via the SRES Collective
+                            {% if asset_type == 'column' and collective_asset.config.uuid %}
+                                <span class="float-right">
+                                    <a class="btn btn-primary" href="#collective_asset_column_preview" data-toggle="modal" 
+                                        data-sres-preview-url="{{ url_for('collective.preview_asset', asset_uuid=collective_asset.config.uuid, _external=True)|safe }}" 
+                                        title="Preview the data entry interface">
+                                        <span class="fa fa-eye"></span> Preview
+                                    </a>
+                                </span>
+                            {% endif %}
+                        </h3>
+                    </div>
+                </div>
+                {% if collective_asset.config.workflow_state == 'deleted' %}
+                <div class="row">
+                    <div class="col">
+                        <div class="alert alert-danger">
+                            <span class="fa fa-trash"></span>
+                            This asset has been marked as deleted.
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Asset name in the Collective</label>
+                    <div class="col-sm-10">
+                        {% if collective_asset.is_user_authorised_editor() or collective_sharing_mode == 'share' %}
+                            <input type="text" name="collective_asset_name" value="{{ request.form.collective_asset_name or collective_asset.config.name }}" required class="form-control" data-sres-required required>
+                        {% else %}
+                            {{ collective_asset.config.name }}
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Asset description in the Collective</label>
+                    <div class="col-sm-10">
+                        {% if collective_asset.is_user_authorised_editor() or collective_sharing_mode == 'share' %}
+                            <div id="collective_asset_description" class="sres-tinymce-editor tinymce-basic border rounded">
+                                {{ (request.form.collective_asset_description or collective_asset.config.description)|safe_no_script }}
+                            </div>
+                        {% else %}
+                            {{ collective_asset.config.description|safe_no_script }}
+                        {% endif %}
+                    </div>
+                </div>
+                {% if collective_asset.is_user_authorised_editor() or collective_sharing_mode == 'share' %}
+                    <div class="form-group row">
+                        <label class="col-sm-2 col-form-label sres-form-label">Make asset available in the Collective</label>
+                        <div class="col-sm-10">
+                            <input type="checkbox" name="collective_asset_active" id="collective_asset_active" value="1" {% if collective_asset.config.workflow_state == 'active' %}checked{% endif %}>
+                            <label for="collective_asset_active">Allow others to access this shared asset from the SRES Collective</label>
+                        </div>
+                    </div>
+                    <div class="form-group row">
+                        <label class="col-sm-2 col-form-label sres-form-label">Asset visibility in the Collective</label>
+                        <div class="col-sm-10">
+                            <select class="form-control" name="collective_asset_visibility">
+                                <option value="institution">Anyone in the institution</option>
+                                <option value="secret" {% if (request.form.collective_asset_visibility or collective_asset.config.visibility) == 'secret' %}selected{% endif %}>Secret (only those with the direct share URL)</option>
+                            </select>
+                        </div>
+                    </div>
+                {% endif %}
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Shared by</label>
+                    <div class="col-sm-10">
+                        {% if collective_asset.is_user_authorised_editor() or collective_sharing_mode == 'share' %}
+                            {% if collective_asset.config.shared_on %}
+                                <div class="row">
+                                    {{ select_users.select_user_fields(
+                                            id='collective_administrator', 
+                                            usernames=request.form['authorised_collective_administrators'] or collective_asset.get_authorised_usernames()
+                                        )
+                                    }}
+                                </div>
+                                on {{ collective_asset.config.shared_on|datetime }}
+                                <script>
+                                    $(document).ready(function(){
+                                        $('#authorised_collective_administrators').chosen({
+                                            width: '100%',
+                                            no_results_text: 'Please use the buttons to add users', 
+                                            placeholder_text_multiple: 'Please use the buttons to add users'
+                                        });
+                                    });
+                                </script>
+                            {% else %}
+                                Not yet shared
+                            {% endif %}
+                        {% else %}
+                            {{ collective_asset.get_friendly_shared_by_names() }}
+                            on {{ collective_asset.config.shared_on|datetime }}
+                        {% endif %}
+                    </div>
+                </div>
+                {% if collective_asset.config.shared_on %}
+                    <div class="form-group row">
+                        <label class="col-sm-2 col-form-label sres-form-label">Direct share URL</label>
+                        <div class="col-sm-10">
+                            <pre>{{ url_for('collective.show_asset', asset_uuid=collective_asset.config.uuid, _external=True) }}</pre>
+                        </div>
+                    </div>
+                {% endif %}
+                {% if collective_sharing_mode == 'share' %}
+                    <div class="row">
+                        <div class="col">
+                            <div class="alert alert-info mb-0">
+                                <span class="fa fa-info-circle"></span>
+                                An overview of the {{ asset_type }} is shown below.
+                                You can update the below configuration <em>after</em> this {{ asset_type }} has been shared.
+                                To share this {{ asset_type }}, complete the details above, then click Save at the bottom of the page.
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+                {% if collective_sharing_mode == 'show' %}
+                    <div class="row">
+                        <div class="col">
+                            <div class="alert alert-info">
+                                <span class="fa fa-info-circle"></span>
+                                An overview of the {{ asset_type }} is shown below.
+                                {% if collective_asset.is_user_authorised_editor() %}
+                                    You can update the below {{ asset_type }} configuration by editing the fields below and clicking Save at the bottom of the page.
+                                {% endif %}
+                                {% if collective_asset.is_user_authorised_viewer() %}
+                                    If you'd like to use this {{ asset_type }}, you can make a copy for yourself by clicking the button at the bottom of the page.
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+            {% if vars.collective_vars.referenced_column_configs or vars.collective_vars.referenced_assets_configs %}
+                <div class="border rounded border-primary p-3 mt-3">
+                    {% if vars.collective_vars.referenced_column_configs %}
+                        {% set _referenced_configs = vars.collective_vars.referenced_column_configs %}
+                    {% elif vars.collective_vars.referenced_assets_configs %}
+                        {% set _referenced_configs = vars.collective_vars.referenced_assets_configs %}
+                    {% endif %}
+                    <div class="form-group row">
+                        <label class="col-sm-2 col-form-label sres-form-label">
+                            {% if vars.collective_vars.referenced_column_configs %}
+                                Share referenced columns
+                            {% elif vars.collective_vars.referenced_assets_configs %}
+                                Columns that are shared together with this {{ asset_type }}
+                            {% endif %}
+                        </label>
+                        <div class="col-sm-10">
+                            <div>
+                                These columns are referenced from (i.e. used by) this {{ asset_type }}.
+                                {% if vars.collective_vars.referenced_column_configs %}
+                                    It may be helpful to share these as well.
+                                {% elif vars.collective_vars.referenced_assets_configs %}
+                                    You can choose to copy these together with the {{ asset_type }} when copying the {{ asset_type }} for your use.
+                                {% endif %}
+                            </div>
+                            {{ _render_referenced_assets(vars, _referenced_configs) }}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    <script>
+        $(document).ready(function(){
+            var tinymceBasicFormattingOnlyToolbar = ['bold italic underline | strikethrough subscript superscript | removeformat | forecolor backcolor | bullist numlist ', 'link unlink | table hr charmap | cut copy paste pastetext | undo redo', 'styleselect fontselect fontsizeselect | code'];
+            tinymce.init({
+                selector: '#collective_asset_description',
+                toolbar: tinymceBasicFormattingOnlyToolbar,
+                menubar: false,
+                inline: true,
+                plugins: 'code textcolor lists link table hr charmap paste',
+                min_height: 80,
+                convert_urls: false,
+                relative_urls: false,
+                remove_script_host: false,
+                readonly: false,
+                content_style: "p {font-family: Arial, Helvetica, sans-serif;}"
+            })
+        });
+    </script>
+    {% if asset_type == 'column' %}
+        {{ collective_preview.render_collective_asset_column_preview_modal() }}
+    {% endif %}
+{% endmacro %}
+
+{% macro _render_referenced_assets(vars, referenced_asset_configs, level=0) %}
+    {% for column_uuid, column_config in referenced_asset_configs.items() %}
+        <div class="mt-2" style="margin-left: {{ level * 0.75 }}rem;">
+            <input type="checkbox" data-toggle="toggle" data-size="small" 
+                {% if vars.collective_vars.referenced_column_configs %}
+                    data-on="<span class=&quot;fa fa-share-alt&quot;></span>"
+                {% elif vars.collective_vars.referenced_assets_configs %}
+                    data-on="<span class=&quot;fa fa-arrow-circle-down&quot;></span>"
+                {% endif %}
+                data-off="<span class=&quot;fa fa-times&quot;></span>" 
+                name="collective_asset_referenced_column_{{ column_uuid }}" {% if 'Tracking counter' not in column_config.name %}checked{% endif %}>
+            {{ column_config.name }}
+            <span class="badge badge-light">{{ column_config.asset_type }}</span>
+            {% if vars.collective_vars.referenced_column_configs %}
+                <a href="{{ url_for('table.edit_column', table_uuid=column_config.table_uuid, column_uuid=column_uuid) }}" target="_blank" title="View settings for original column"><span class="fa fa-cog"></span></a>
+            {% elif vars.collective_vars.referenced_assets_configs %}
+                <a href="{{ url_for('collective.show_asset', asset_uuid=column_uuid) }}" target="_blank" title="View shared column"><span class="fa fa-cog"></span></a>
+            {% endif %}
+        </div>
+        {% if column_config.children %}
+            {{ _render_referenced_assets(vars, column_config.children, level + 1) }}
+        {% endif %}
+    {% endfor %}
+{% endmacro %}
+
+{% macro render_collective_action_buttons(collective_asset, collective_sharing_mode, vars) %}
+    {% if collective_asset.is_user_authorised_editor() or collective_sharing_mode == 'share' %}
+        <button id="btn_save" class="btn btn-primary">
+            <span class="fa fa-save"></span> Save to the SRES Collective
+        </button>
+    {% endif %}
+    {% if collective_sharing_mode == 'show' and (collective_asset.is_user_authorised_viewer() or collective_asset.is_user_authorised_editor()) %}
+        <div class="modal fade" id="collective_asset_select_target_list" tabindex="-1" role="dialog">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h4 class="modal-title">Select new target list</h4>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-2">
+                            Please select a list to associate with the newly copied asset(s).
+                        </div>
+                        <select id="collective_asset_select_target_list_selector">
+                            {% for available_table in vars.authorised_tables %}
+                                <option value="{{ available_table.uuid }}">{{ available_table.code }} {{ available_table.name }} ({{ available_table.year }} semester {{ available_table.semester }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
+                        <button type="button" id="collective_asset_select_target_list_go" class="btn btn-primary">
+                            <span class="fa fa-circle-notch spinning d-none sres-spinner" role="status"></span>
+                            Copy from the Collective
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+            $(document).on('shown.bs.modal', '#collective_asset_select_target_list', function(){
+                $('#collective_asset_select_target_list_selector').chosen({
+                    width: '100%',
+                    search_contains: true
+                });
+            });
+            $(document).on('click', '#collective_asset_select_target_list_go', function(){
+                $(this).find('.sres-spinner').removeClass('d-none');
+                $('[data-sres-role=main_form]')
+                    .attr('action', "{{ url_for('collective.copy_asset', asset_uuid=collective_asset.config.uuid, table_uuid='__table_uuid__', _external=True)|safe }}".replace('__table_uuid__', $('#collective_asset_select_target_list_selector').val()))
+                    .trigger('submit');
+            });
+        </script>
+        <button type="button" class="btn btn-primary" data-target="#collective_asset_select_target_list" data-toggle="modal">
+            <span class="fa fa-arrow-circle-down"></span> Make a copy of this {{ asset_type }} for myself
+        </button>
+        <button type="button" class="btn btn-outline-primary" id="collective_asset_like">
+            <span class="fa fa-heart {% if collective_asset.is_liked_by_user() %}text-danger{% endif %}"></span>
+            Like
+            (<span id="collective_asset_likes_count">{{ collective_asset.count_number_of_likes() }}</span>)
+        </button>
+        <script>
+            $(document).on('click', '#collective_asset_like', function(){
+                $.ajax({
+                    url: "{{ url_for('collective.like_asset', asset_uuid=collective_asset.config.uuid, _external=True)|safe }}",
+                    method: 'PUT',
+                    success: function(data){
+                        data = JSON.parse(data);
+                        $('#collective_asset_likes_count').html(data.count);
+                        $('#collective_asset_like span.fa-heart').removeClass('text-primary text-danger');
+                        if (data.liked_by_me) {
+                             $('#collective_asset_like span.fa-heart').addClass('text-danger');
+                        }
+                    }
+                });
+            });
+        </script>
+    {% endif %}
+    {% if collective_asset.is_user_authorised_editor() and collective_sharing_mode == 'show' %}
+        <a class="btn btn-danger" href="{{ url_for('collective.delete_asset', asset_uuid=collective_asset.config.uuid) }}">
+            <span class="fa fa-trash"></span> Delete from the Collective
+        </a>
+    {% endif %}
+{% endmacro %}

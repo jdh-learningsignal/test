@@ -1,0 +1,81 @@
+# Translations template for PROJECT.
+# Copyright (C) 2020 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2020.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2020-06-05 10:54+1000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.7.0\n"
+
+#: tables.py:46
+msgid "Unique ID"
+msgstr ""
+
+#: tables.py:48
+msgid "e.g. student ID number"
+msgstr ""
+
+#: tables.py:82
+msgid "Username"
+msgstr ""
+
+#: tables.py:84
+msgid "e.g. unikey"
+msgstr ""
+
+#: templates/import-data.html:97
+msgid "(such as SID, email, unikey)"
+msgstr ""
+
+#: templates/login.html:31
+msgid "Unikey username"
+msgstr ""
+
+#: templates/login.html:34
+msgid "Unikey password"
+msgstr ""
+
+#: templates/login.html:48
+msgid "Log in using Single Sign On"
+msgstr ""
+
+#: templates/portal-edit.html:154
+msgid "Embed into LMS via LTI"
+msgstr ""
+
+#: templates/portal-edit.html:180
+msgid ""
+"Navigate to the learning management system and use its editing functions "
+"to insert this SRES portal."
+msgstr ""
+
+#: templates/select-users.html:45
+msgid "Search for a person"
+msgstr ""
+
+#: templates/select-users.html:53
+msgid "Use entered username"
+msgstr ""
+
+#: templates/table-edit.html:58
+msgid "Unit of study code"
+msgstr ""
+
+#: templates/table-edit.html:64
+msgid "Unit of study name"
+msgstr ""
+
+#: templates/table-edit.html:76
+msgid "Semester"
+msgstr ""
+

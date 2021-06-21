@@ -1,0 +1,2 @@
+recursive-include sres/templates *
+recursive-include sres/static *

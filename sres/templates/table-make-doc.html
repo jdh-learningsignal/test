@@ -1,0 +1,151 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+    Make printouts for {{ table.config.code }}
+{% endblock %}
+
+{% block head_css2 %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/query-builder.default.css') }}">
+    <style>
+        .sres-tinymce-editor {
+            padding: 0.5rem;
+        }
+    </style>
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/tinymce/tinymce.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tinymce/jquery.tinymce.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.table-make-doc.js') }}"></script>
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col">
+            <h2>Make printouts for {{ table.get_full_name() }}</h2>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col">
+            <form method="post" action="{{ url_for('table.make_doc', table_uuid=table.config.uuid) }}" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="encoded_identifiers" value="{{ vars.encoded_identifiers }}">
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Grid</label>
+                    <div class="col-sm-10 form-inline">
+                        Rows per page
+                        <input type="number" min="1" max="10" step="1" name="rows_per_page" value="{% if vars.template_config %}{{ vars.template_config.rows_per_page }}{% else %}{{ request.form.rows_per_page or vars.defaults.rows_per_page }}{% endif %}" class="m-1 form-control">
+                        Columns per page
+                        <input type="number" min="1" max="10" step="1" name="columns_per_page" value="{% if vars.template_config %}{{ vars.template_config.columns_per_page }}{% else %}{{ request.form.columns_per_page or vars.defaults.columns_per_page }}{% endif %}" class="m-1 form-control">
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Contents of each grid cell</label>
+                    <div class="col-sm-10">
+                        <div id="editor1" class="tinymce-basic border rounded p-2">{% if vars.template_config %}{{ vars.template_config.html|safe_no_script }}{% else %}{{ (request.form.editor1 or vars.defaults.content)|safe_no_script }}{% endif %}</div>
+                        <div class="mt-3">
+                            <label>Insert fields</label>
+                            <div class="form-inline">
+                                <div class="input-group m-1">
+                                    <div class="input-group-prepend">
+                                        <button type="button" class="btn btn-default" id="insert_field_barcode" value="$CODE128$"><span class="fa fa-barcode" aria-hidden="true"></span> Linear barcode</button>
+                                    </div>
+                                    <input type="text" name="barcode_width" class="form-control" value="{{ request.form.barcode_width or vars.defaults.barcode_width }}" size="4">
+                                    <div class="input-group-append">
+                                        <span class="input-group-text">pixels (leave blank for default)</span>
+                                    </div>
+                                </div>
+                                <div class="input-group m-1">
+                                    <div class="input-group-prepend">
+                                        <button type="button" class="btn btn-default" id="insert_field_qrcode" value="$QRCODE$"><span class="fa fa-qrcode" aria-hidden="true"></span> QR code</button>
+                                    </div>
+                                    <input type="text" name="qrsize" class="form-control" value="{{ request.form.qrsize or vars.defaults.qrsize }}" size="4">
+                                    <div class="input-group-append">
+                                        <span class="input-group-text">pixels</span>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-default m-1" id="insert_field_uoscode" value="$UOSCODE$">Unit code</button>
+                                <button type="button" class="btn btn-default m-1" id="insert_field_uosname" value="$UOSNAME$">Unit name</button>
+                                <button type="button" class="btn btn-default m-1" id="insert_field_year" value="$YEAR$">Unit year</button>
+                                <button type="button" class="btn btn-default m-1" id="insert_field_semester" value="$SEMESTER$">Unit semester</button>
+                                <button type="button" class="btn btn-default m-1" id="insert_data_from_list">Insert data field</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Make printout</label>
+                    <div class="col-sm-10">
+                        <div>
+                            After a short processing time, this will download an HTML file onto your computer.
+                            Open this HTML file in Word or similar editing software to adjust formatting as needed and print.
+                        </div>
+                        <button class="btn btn-primary mt-2" name="action" value="make">Make</button>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-sm-2 col-form-label sres-form-label">Printout templates</label>
+                    <div class="col-sm-10">
+                        <div class="mb-3">
+                            You can optionally save this printout template or retrieve saved templates.
+                        </div>
+                        <div class="input-group mb-3">
+                            <div class="input-group-prepend">
+                                <span class="input-group-text">Template name</span>
+                            </div>
+                            <input type="text" class="form-control" name="template_name" value="{% if vars.template_config %}{{ vars.template_config.name }}{% endif %}">
+                            <input type="hidden" class="form-control" name="template_uuid" value="{{ vars.template_uuid }}">
+                            <div class="input-group-append">
+                                {% if vars.template_uuid %}
+                                    <button class="btn btn-outline-secondary" name="action" value="save">Save</button>
+                                {% endif %}
+                                <button class="btn btn-outline-secondary" name="action" value="saveas">Save as new template</button>
+                            </div>
+                        </div>
+                        <div class="form-inline">
+                            {% if vars.template_uuid %}
+                                <button class="btn btn-outline-secondary mr-3" name="action" value="delete">Delete current saved template</button>
+                            {% endif %}
+                            <div class="dropdown">
+                                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-toggle="dropdown">
+                                    Saved templates
+                                </button>
+                                <div class="dropdown-menu">
+                                    {% for u, t in vars.printout_templates.items() %}
+                                        <a class="dropdown-item" href="#" data-sres-template-uuid="{{ u }}">{{ t.name }}</a>
+                                    {% else %}
+                                        <a class="dropdown-item" href="#">There are no saved templates</a>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    {% import 'select-column.html' as select_column %}
+    {{ select_column.column_chooser(
+        available_tables=vars.authorised_tables,
+        student_info_items=vars.SYSTEM_COLUMNS
+    ) }}
+    
+{% endblock %}

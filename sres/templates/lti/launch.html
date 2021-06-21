@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block title %}
+    SRES LTI 
+{% endblock %}
+
+{% block body %}
+        <div class="row mt-3">
+            <div class="col">
+                <div class="card bg-light">
+                    <div class="card-header">
+                        <span class="fa fa-plug" aria-hidden="true"></span> Choose an asset type to embed
+                        <span class="float-right text-muted">Logged in as {{ display_name }} {{ username }}</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-sm-12">
+                                <a href="{{ url_for('lti.find_asset', asset_type='portal') }}" class="btn btn-outline-primary"><span class="fa fa-window-maximize"></span> Portal</a>
+                                <a href="{{ url_for('lti.find_asset', asset_type='column_sda') }}" class="btn btn-outline-primary"><span class="fa fa-columns"></span> Student direct access column</a>
+                                <a href="{{ url_for('lti.find_asset', asset_type='column') }}" class="btn btn-outline-primary"><span class="fa fa-columns"></span> Staff-access column</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    
+{% endblock %}

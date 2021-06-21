@@ -1,0 +1,10 @@
+URL_BASE = "https://sres-dev.uni.edu.au"
+CHROMEDRIVER_PATH = "/var/local/www/chromedriver/chromedriver"
+
+REAL_TARGET_EMAILS = [
+    
+]
+
+REAL_SENDER_EMAIL_NAME = 'Your name here'
+REAL_SENDER_EMAIL_ADDRESS = 'your.email@uni.edu.au'
+

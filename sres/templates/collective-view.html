@@ -1,0 +1,150 @@
+{% extends 'base-staff.html' %}
+
+{% import 'collective-share.html' as collective_share %}
+{% import 'collective-preview.html' as collective_preview %}
+
+{% block title %}
+    View the SRES Collective
+{% endblock %}
+
+{% block head_css2 %}
+    <style>
+        .sres-collective-asset-like {
+            cursor: pointer;
+        }
+        .sres-collective-asset-description {
+            max-height: 20rem;
+            overflow-y: scroll;
+        }
+    </style>
+{% endblock %}
+
+{% block head_js2 %}
+    <script src="{{ url_for('static', filename='js/jquery-ui.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.collective-view.js') }}"></script>
+    {% raw %}
+        <script id="collective_asset_template" type="text/x-handlebars-template">
+            <div class="col-md-4 py-3">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <span class="fa fa-{{asset_icon}}"></span>
+                        {{display_type}}
+                        <div class="float-right">
+                            {{#if preview_url}}
+                                <a href="#collective_asset_column_preview" data-toggle="modal" data-sres-preview-url="{{preview_url}}" title="Preview the data entry interface"><span class="fa fa-eye"></span></a>
+                            {{/if}}
+                            <a href="{{url}}" title="More information about this {{display_type}}"><span class="fa fa-info-circle"></span></a>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <a href="{{url}}">{{name}}</a>
+                            {{#if secret}}
+                                <span class="badge badge-light" title="Secret - visible only to sharers">Secret</span>
+                            {{/if}}
+                        </h5>
+                        <div class="card-text sres-collective-asset-description">{{{description}}}</div>
+                    </div>
+                    <div class="card-footer">
+                        <small class="text-muted">
+                            Shared {{shared_on}}
+                            {{#if shared_by}}
+                                by {{shared_by}}
+                            {{/if}}
+                        </small>
+                        <span class="float-right text-muted">
+                            <span class="sres-collective-asset-like-count" data-sres-asset-uuid="{{asset_uuid}}">{{liked_by}}</span>
+                            <span class="sres-collective-asset-like text-muted" data-sres-asset-uuid="{{asset_uuid}}"><span class="fa fa-heart {{#if liked_by_me}}text-danger{{/if}}"></span></span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </script>
+    {% endraw %}
+    <script>
+        ENV['SHOW_ASSET_ENDPOINT'] = "{{ url_for('collective.show_asset', asset_uuid='__asset_uuid__', _external=True)|safe }}"
+        ENV['PREVIEW_ASSET_ENDPOINT'] = "{{ url_for('collective.preview_asset', asset_uuid='__asset_uuid__', _external=True)|safe }}"
+        ENV['SEARCH_COLLECTIVE_ENDPOINT'] = "{{ url_for('collective.search_collective', _external=True)|safe }}"
+        ENV['LIKE_ASSET_ENDPOINT'] = "{{ url_for('collective.like_asset', asset_uuid='__asset_uuid__', _external=True)|safe }}"
+    </script>
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <div class="row">
+        <div class="col">
+            <h2>
+                SRES Collective
+            </h2>
+        </div>
+    </div>
+    <div class="row mb-2">
+        <div class="col">
+            The SRES Collective is a place where teachers can share practice through sharing their SRES columns, filters, and portals. 
+            Any other teacher can search or browse items in the Collective, view them, and then use them if it would be useful.
+        </div>
+    </div>
+    <div class="row">
+        <div class="col">
+            <div class="alert alert-warning">
+                <span class="fa fa-flask"></span>
+                The SRES Collective is still a bit experimental. Please report any breakages.
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col">
+            <div class="form-group row">
+                <label class="col-sm-2 col-form-label sres-form-label">Search</label>
+                <div class="col-sm-10">
+                    <div class="form-group">
+                        <input type="text" name="search_term" id="search_term" class="form-control" placeholder="Search for...">
+                    </div>
+                    <div class="form-group">
+                        {% for asset_type, asset_meta in vars.all_asset_types.items() %}
+                            <span class="mr-3">
+                                <input type="checkbox" checked name="search_asset_types" value="{{ asset_type }}" data-toggle="toggle" data-on="<span class=&quot;fa fa-{{ asset_meta.display_icon }}&quot;></span> {{ asset_meta.display }}" data-off="{{ asset_meta.display }}">
+                            </span>
+                        {% endfor %}
+                        <span class="mr-3">
+                            <input type="checkbox" name="show_only_my_shared_assets" value="1" data-toggle="toggle" data-on="Only show my own shared assets" data-onstyle="warning" data-off="Showing everyone's shared assets" data-offstyle="success">
+                        </span>
+                    </div>
+                    <div class="form-group">
+                        <button type="button" class="btn btn-primary" id="search">
+                            <span class="fa fa-search"></span>
+                            Search
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group row">
+                <label class="col-sm-2 col-form-label sres-form-label">Available assets in the Collective</label>
+                <div class="col-sm-10">
+                    <div id="collective_assets_container" class="row">
+                        Loading...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {{ collective_preview.render_collective_asset_column_preview_modal() }}
+    
+{% endblock %}

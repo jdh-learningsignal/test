@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block head_css1 %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chosen.min.css') }}">
+    <style>
+		.ms-container {
+			width: 100% !important;
+		}
+		.sres-condition-column-placeholder {
+			text-decoration-line: underline;
+			text-decoration-style: dotted;
+			cursor: pointer;
+			padding-top: 3px;
+			padding-bottom: 3px;
+		}
+        .sres-condition-column-remove {
+			cursor: pointer;
+            padding-left: 0.5rem;
+            padding-right: 0.5rem;
+        }
+    </style>
+{% endblock %}
+
+{% block head_js1 %}
+    <script src="{{ url_for('static', filename='js/jquery-ui.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/chosen.jquery.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/bootstrap.waitingDialog.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.anonymiser-toggle.js') }}"></script>
+    <script>
+        ENV['ANONYMISER_TOGGLE_ENDPOINT'] = '{{ url_for("index.toggle_anonymiser") }}';
+        ENV['LIST_COLUMNS_ENDPOINT'] = '{{ url_for("table.list_columns", table_uuid="__table_uuid__")|safe }}';
+        ENV['REREFERENCE_COLUMNS_ENDPOINT'] = "{{ url_for('table.rereference_columns') }}";
+    </script>
+{% endblock %}
+
+{% block nav %}
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <span class="navbar-brand d-lg-none">SRES</span>
+        <span class="navbar-brand d-none d-lg-block">Student Relationship Engagement System</span>
+        <button type="button" class="navbar-toggler" data-toggle="collapse" data-target="#sres-navbar-collapse-1" aria-expanded="false" aria-label="Toggle menu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="sres-navbar-collapse-1">
+            <ul class="mr-auto navbar-nav">
+                <li class="nav-item">
+                    <a href="{{ url_for('index.index') }}" class="nav-link" title="Home"><span class="fa fa-home" aria-hidden="true"></span></a>
+                </li>
+                <!--li class="dropdown hidden nav-item" id="navbar_onboarding_icon">
+                    <a href="#" class="nav-link dropdown-toggle" data-toggle="dropdown"><span class="fa fa-headphones" aria-hidden="true" title="Contextual guides"></span></a>
+                    <ul class="dropdown-menu"></ul>
+                </li-->
+                {% if request.blueprint == 'table' or request.blueprint == 'summary' %}
+                    <li class="nav-item">
+                        <a href="{{ url_for('table.view_table', table_uuid=vars.table_uuid) }}" class="nav-link" aria-label="View list" title="View list"><span class="fa fa-table" aria-hidden="true"></span></a>
+                    </li>
+                {% endif %}
+                {% if request.blueprint == 'collective' %}
+                    <li class="nav-item">
+                        <a href="{{ url_for('collective.view_collective') }}" class="nav-link" aria-label="View the Collective" title="View the Collective"><span class="fa fa-share-alt" aria-hidden="true"></span></a>
+                    </li>
+                {% endif %}
+            </ul>
+            <ul class="navbar-nav ml-auto">
+                <li id="navbar_global_help_icon">
+                    <a href="#sres_global_helpbox_modal" data-toggle="modal" data-target="#sres_global_helpbox_modal" class="nav-link" aria-label="Help" title="Help"><span class="fa fa-question-circle" aria-hidden="true"></span></a>
+                </li>
+                {% if session.get("username", "") != "" %}
+                    <li class="navbar-text">
+                        <span id="logged_in_display_name">
+                            <a href="{{ url_for('me.view_my_account') }}">{{ session.get("display_name", "") }}</a>
+                        </span>
+                        <span id="logged_in_username">{{ session.get("username", "") }}</span>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-link sres-anonymiser-toggle" data-sres-identity-anonymiser-active="{{ session.get('identity_anonymiser_active', false) }}"><span class="fa fa-user-secret" aria-hidden="true"></span></a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('login.logout') }}" class="nav-link" title="Log out" aria-label="Log out"><span class="fa fa-sign-out-alt" aria-hidden="true"></span></a>
+                    </li>
+                {% endif %}
+            </ul>
+        </div>
+        </div>
+    </nav>
+    <div class="modal" tabindex="-1" role="dialog" id="sres_global_helpbox_modal">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">{{ config.SRES.HELPBOX.TITLE or 'Help' }}</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    {{ config.SRES.HELPBOX.HTML|safe }}
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

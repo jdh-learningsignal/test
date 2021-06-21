@@ -1,0 +1,322 @@
+{% extends 'base-staff.html' %}
+
+{% block title %}
+    View summaries
+{% endblock %}
+
+{% block head_css2 %}
+    <style>
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/sres.summary-view.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/jqcloud.min.css') }}">
+{% endblock %}
+
+{% block head_js2 %}
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <script type="text/javascript">
+        google.charts.load('current', {'packages':['bar', 'corechart']});
+    </script>
+    <script src="{{ url_for('static', filename='js/ajaxq.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/handlebars.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/jqcloud.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/bootstrap-select.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.summary-draw.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/sres.summary-view.js') }}"></script>
+    {% raw %}
+        <script id="summary_card_template" type="text/x-handlebars-template">
+            <div class="col-md-6 col-sm-12 py-3 sres-summary-card" id="{{id}}"
+                    data-sres-canonical-reference="{{canonicalReference}}"
+                    data-sres-column-reference-encoded="{{columnReferenceEncoded}}"
+                    data-sres-calculation-mode="{{calcMode}}"
+                    data-sres-calculation-mode-extra-config="{{calcModeExtraConfig}}"
+                    data-sres-presentation-mode="{{presMode}}"
+                    data-sres-presentation-mode-extra-config="{{presModeExtraConfig}}"
+                    data-sres-grouping-mode="{{groupingMode}}"
+                    data-sres-grouping-column-reference="{{groupingColumnReference}}"
+                    data-sres-grouping-comparison-mode="{{groupingComparisonMode}}"
+                    data-sres-summary-name="{{name}}"
+                    data-sres-summary-description="{{description}}">
+                <div class="card h-100">
+                    <div class="card-body">
+                        {% endraw %}{% if vars.is_list_admin %}
+                        <span class="float-right sres-summary-card-actions">
+                            <!--a class="sres-summary-card-handle text-secondary" aria-label="Sort summary card"><span class="fa fa-grip-horizontal" aria-hidden="true"></span></a-->
+                            <a class="sres-summary-card-action-edit sres-clickable text-primary" aria-label="Edit summary" data-tippy-content="Configure summary"><span class="fa fa-pen" aria-hidden="true"></span></a>
+                            <a class="sres-summary-card-action-delete sres-clickable text-primary" aria-label="Delete summary" data-tippy-content="Delete summary"><span class="fa fa-trash" aria-hidden="true"></span></a>
+                        </span>{% endif %}{% raw %}
+                        <h5 class="sres-summary-card-title pb-2">{{name}}</h5>
+                        <h6 class="sres-summary-card-subtitle pb-2">{{description}}</h6>
+                        <div class="sres-summary-card-body">
+                        </div>
+                        <div class="sres-summary-grouping-container pt-4 d-none">
+                            <label class="sres-form-label" for="grouping_values_{{id}}">
+                                Group by
+                                <span class="sres-summary-grouping-column-name"></span>:
+                            </label>
+                            <select class="sres-summary-grouping-values" multiple id="grouping_values_{{id}}" data-sres-grouping-column-reference-current="{{groupingColumnReference}}">
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </script>
+    {% endraw %}
+    <script>
+        ENV['GET_REPRESENTATION_DATA_ENDPOINT'] = "{{ url_for('summary.view_representation', table_uuid=table.config.uuid, col='__col__', calc_mode='__calc_mode__', pres_mode='__pres_mode__', group_mode='__group_mode__', group_col='__group_col__', group_vals='__group_vals__', group_comp_mode='__group_comp_mode__')|safe }}";
+        ENV['SUMMARIES_CRUD_ENDPOINT'] = "{{ url_for('summary.crud_summaries', table_uuid=table.config.uuid, summary_uuid='__summary_uuid__')|safe }}";
+        {% if vars.mode == 'table' %}
+            ENV['LIST_SUMMARIES_ENDPOINT'] = "{{ url_for('summary.list_summaries', table_uuid=table.config.uuid)|safe }}";
+        {% elif vars.mode == 'column' %}
+            ENV['LIST_SUMMARIES_ENDPOINT'] = "{{ url_for('summary.list_summaries', table_uuid=table.config.uuid, column_uuid=column.config.uuid)|safe }}";
+        {% endif %}
+    </script>
+{% endblock %}
+
+{% block body %}
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="row">
+                <div class="col">
+                    <br>
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    {% endwith %}
+    
+    <div class="sres-main mt-3">
+        <div class="row">
+            <div class="col">
+                {% if vars.is_list_admin %}
+                    <span class="float-right">
+                        <button type="button" class="btn btn-success" id="new_summary"><span class="fa fa-plus"></span> New summary</button>
+                    </span>
+                {% endif %}
+                {% if vars.mode == 'table' %}
+                    <h2>
+                        View summaries for {{ table.get_full_name() }}
+                    </h2>
+                {% elif vars.mode == 'column' %}
+                    <h2>
+                        View summaries for {{ column.get_friendly_name(show_table_info=False, get_text_only=True) }}
+                        <small>in {{ table.get_full_name() }}</small>
+                    </h2>
+                {% endif %}
+            </div>
+        </div>
+        <div class="row /*sortable*/" id="summaries_container">
+        </div>
+    </div>
+    
+    {% if vars.is_list_admin %}
+        <div class="sres-pane">
+            <div class="row mb-2">
+                <div class="col">
+                    <h2 class="float-left">Configure a summary</h2>
+                    <span class="float-right">
+                        <button type="button" class="close sres-pane-close" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </span>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col">
+                    <form id="summary_config_form">
+                        <input type="hidden" name="summary_id" id="summary_id" value="" />
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        <div class="form-group">
+                            <label class="sres-form-label">Pick a column</label>
+                            <select id="summary_column_reference" multiple>
+                                {% for col in vars.available_columns %}
+                                    <option value="{{ col.value }}">{{ col.full_display_text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="sres-form-label" for="summary_calculation_mode">Calculation method</label>
+                            <select name="summary_calculation_mode" id="summary_calculation_mode" class="form-control">
+                                {% for mode in vars.calculation_modes %}
+                                    <option value="{{ mode.id }}">{{ mode.title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group ml-4">
+                            {% for mode in vars.calculation_modes %}
+                                {% if mode.extra_config %}
+                                    <div data-sres-calculation-extra-config-parent="{{ mode.id }}" class="d-none">
+                                        {% for config in mode.extra_config %}
+                                            <div class="form-group">
+                                                <label class="sres-form-label" for="summary_calculation_mode_extra_config_{{ config.id }}">
+                                                    {{ config.title }}
+                                                    {% if config.hint %}
+                                                        <span class="fa fa-question-circle" data-tippy-content="{{ config.hint }}"></span>
+                                                    {% endif %}
+                                                </label>
+                                                {% if config.type == 'input' %}
+                                                    <input type="text" id="summary_calculation_mode_extra_config_{{ config.id }}" 
+                                                        value="{{ config.default }}" data-sres-calculation-extra-config-id="{{ config.id }}"
+                                                        class="form-control sres-calculation-extra-config-field">
+                                                {% elif config.type == 'select' %}
+                                                    <select class="form-control sres-calculation-extra-config-field"
+                                                            id="summary_calculation_mode_extra_config_{{ config.id }}" 
+                                                            data-sres-calculation-extra-config-id="{{ config.id }}">
+                                                        {% for option in config.options %}
+                                                            <option value="{{ option.value }}">{{ option.display }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                {% endif %}
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                            {% for config in vars.calculation_modes_global_extra_config %}
+                                <div class="form-group">
+                                    <label class="sres-form-label mt-1" for="summary_calculation_mode_extra_config_{{ config.id }}">
+                                        {{ config.title }}
+                                        {% if config.hint %}
+                                            <span class="fa fa-question-circle" data-tippy-content="{{ config.hint }}"></span>
+                                        {% endif %}
+                                    </label>
+                                    {% if config.type == 'select' %}
+                                        <select class="form-control sres-calculation-extra-config-field"
+                                                id="summary_calculation_mode_extra_config_{{ config.id }}" 
+                                                data-sres-calculation-extra-config-id="{{ config.id }}">
+                                            {% for option in config.options %}
+                                                <option value="{{ option.value }}">{{ option.display }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div class="form-group">
+                            <label class="sres-form-label" for="summary_presentation_mode">Presentation method</label>
+                            <select name="summary_presentation_mode" id="summary_presentation_mode" class="form-control">
+                                {% for mode in vars.presentation_modes %}
+                                    <option value="{{ mode.id }}">{{ mode.title }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group ml-4">
+                            {% for mode in vars.presentation_modes %}
+                                {% if mode.extra_config %}
+                                    <div data-sres-presentation-extra-config-parent="{{ mode.id }}" class="d-none">
+                                        {% for config in mode.extra_config %}
+                                            <div class="form-group">
+                                                <label class="sres-form-label" for="summary_presentation_mode_extra_config_{{ config.id }}">
+                                                    {{ config.title }}
+                                                    {% if config.hint %}
+                                                        <span class="fa fa-question-circle" data-tippy-content="{{ config.hint }}"></span>
+                                                    {% endif %}
+                                                </label>
+                                                {% if config.type == 'input' %}
+                                                    <input type="text" id="summary_presentation_mode_extra_config_{{ config.id }}" 
+                                                        value="{{ config.default }}" data-sres-presentation-extra-config-id="{{ config.id }}"
+                                                        class="form-control sres-presentation-extra-config-field">
+                                                {% elif config.type == 'select' %}
+                                                    <select class="form-control sres-presentation-extra-config-field"
+                                                            id="summary_presentation_mode_extra_config_{{ config.id }}" 
+                                                            data-sres-presentation-extra-config-id="{{ config.id }}">
+                                                        {% for option in config.options %}
+                                                            <option value="{{ option.value }}">{{ option.display }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                {% endif %}
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                            {% for config in vars.presentation_modes_global_extra_config %}
+                                <div class="form-group">
+                                    <label class="sres-form-label mt-1" for="summary_presentation_mode_extra_config_{{ config.id }}">
+                                        {{ config.title }}
+                                        {% if config.hint %}
+                                            <span class="fa fa-question-circle" data-tippy-content="{{ config.hint }}"></span>
+                                        {% endif %}
+                                    </label>
+                                    {% if config.type == 'input' %}
+                                        <input type="text" id="summary_presentation_mode_extra_config_{{ config.id }}" 
+                                            value="{{ config.default }}" data-sres-presentation-extra-config-id="{{ config.id }}"
+                                            class="form-control sres-presentation-extra-config-field">
+                                    {% elif config.type == 'select' %}
+                                        <select class="form-control sres-presentation-extra-config-field"
+                                                id="summary_presentation_mode_extra_config_{{ config.id }}" 
+                                                data-sres-presentation-extra-config-id="{{ config.id }}">
+                                            {% for option in config.options %}
+                                                <option value="{{ option.value }}">{{ option.display }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="sres-form-label" for="summary_grouping_mode">Grouping</label>
+                            <select name="summary_grouping_mode" id="summary_grouping_mode" class="form-control">
+                                <option value="disabled">Disabled</option>
+                                <option value="enabled">Enabled</option>
+                            </select>
+                        </div>
+                        <div class="form-group ml-4" class="d-none">
+                            <label class="sres-form-label" for="summary_grouping_column_reference">Pick a column to group by</label>
+                            <select id="summary_grouping_column_reference">
+                                {% for col in vars.all_columns %}
+                                    <option value="{{ col.value }}">{{ col.full_display_text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group ml-4" class="d-none">
+                            <label class="sres-form-label" for="summary_grouping_comparison_mode">Show comparison to everyone</label>
+                            <select id="summary_grouping_comparison_mode" class="form-control">
+                                <option value="disabled">Just show selected group(s)</option>
+                                <option value="enabled">Show comparison if possible</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="sres-form-label" for="summary_name">Name</label>
+                            <span class="badge badge-secondary">Required</span>
+                            <input type="text" name="summary_name" id="summary_name" value="" required class="form-control" data-sres-required>
+                        </div>
+                        <div class="form-group">
+                            <label class="sres-form-label" for="summary_description">Description</label>
+                            <input type="text" name="summary_description" id="summary_description" value="" class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label class="sres-form-label" for="summary_canonical_reference">Canonical reference</label>
+                            <input type="text" name="summary_canonical_reference" id="summary_canonical_reference" value="" class="form-control" readonly>
+                        </div>
+                        <div class="form-group">
+                            <button id="summary_save_new" type="button" class="btn btn-primary mr-1 mb-2">
+                                <span class="fa fa-save"></span> Save as new
+                            </button>
+                            <button id="summary_save" type="button" class="btn btn-primary mr-1 mb-2">
+                                <span class="fa fa-save"></span> Update
+                            </button>
+                            <button id="summary_delete" type="button" class="btn btn-danger mr-1 mb-2">
+                                <span class="fa fa-trash"></span> Delete
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        {% import 'select-column.html' as select_column %}
+        {{ select_column.column_chooser(
+            available_tables=vars.authorised_tables,
+            student_info_items=vars.SYSTEM_COLUMNS,
+            magic_formatters_list=vars.MAGIC_FORMATTERS_LIST,
+            general_fields_items=vars.GENERAL_FIELDS
+        ) }}
+    {% endif %}
+    
+{% endblock %}
